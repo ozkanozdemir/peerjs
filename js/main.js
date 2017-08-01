@@ -27,8 +27,6 @@ $('#btnCall').click(() => {
     })
 })
 
-
-
 peer.on('call', call => {
     openStream(stream => {
         playVideo(stream, 'localStream')
