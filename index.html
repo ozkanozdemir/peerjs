@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <title>Peer JS</title>
+</head>
+<body>
+<div class="container">
+    <h1>Peer JS</h1>
+    <h3>My peer id : <span id="myPeerId"></span></h3>
+    <video id="localStream" width="300" controls></video>
+    <video id="friendStream" width="300" controls></video>
+    <br>
+    <input type="text" placeholder="Your friend id" id="txtFriendId">
+    <button class="btn btn-primary" id="btnCall">Connect</button>
+</div>
+<script src="dist/bundle.js"></script>
+</body>
+</html>
