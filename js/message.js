@@ -33,6 +33,7 @@ $('#btnSend').click(() => {
 
 peer.on('connection', function(conn) {
     console.log('Connected!')
+    console.log(conn)
     conn.on('data', data => {
         console.log('Received', data)
     })
