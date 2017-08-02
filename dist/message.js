@@ -1522,6 +1522,12 @@ Object.defineProperty(__webpack_exports__, "__esModule", { value: true });
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_1_uid___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_1_uid__);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_2_jquery__ = __webpack_require__(14);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_2_jquery___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_2_jquery__);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_3__openStream__ = __webpack_require__(15);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_3__openStream___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_3__openStream__);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_4__playVideo__ = __webpack_require__(16);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_4__playVideo___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_4__playVideo__);
+
+
 
 
 
@@ -1530,9 +1536,9 @@ let myId = null;
 let connectedPeers = {};
 
 const config = { host: 'peerjs-.herokuapp.com', port: 443, secure: true, key: 'peerjs' };
-const peer = new __WEBPACK_IMPORTED_MODULE_0_peerjs___default.a(getPeer(), config);
+const peer = new __WEBPACK_IMPORTED_MODULE_0_peerjs___default.a(getPeerId(), config);
 
-function getPeer() {
+function getPeerId() {
     myId = __WEBPACK_IMPORTED_MODULE_1_uid___default()(10);
     __WEBPACK_IMPORTED_MODULE_2_jquery___default()('#myPeerId').html(myId);
     return myId;
@@ -1543,36 +1549,17 @@ function createText(data) {
     return text;
 }
 
-// listen connection
-peer.on('connection', function (conn) {
-    __WEBPACK_IMPORTED_MODULE_2_jquery___default()('#connectStatus').removeClass().addClass('text-info').html(conn.peer + ' connected with me.');
-    __WEBPACK_IMPORTED_MODULE_2_jquery___default()('#txtFriendId').val(conn.peer);
-    __WEBPACK_IMPORTED_MODULE_2_jquery___default()('#chat').show();
-    connectedPeers[conn.peer] = conn;
+function createVideo(id) {
+    const video = '<div class="col-xs-6">' + 'Id : ' + id + '<video id="' + id + '" controls></video>' + '</div>';
+    __WEBPACK_IMPORTED_MODULE_2_jquery___default()("#cams").append(video);
+}
 
-    console.log(conn.peer + ' bana bağlandı.');
+function appendData(data) {
+    __WEBPACK_IMPORTED_MODULE_2_jquery___default()("#chat ul").append(createText(data));
+}
 
-    conn.on('open', () => {
-        conn.send({ label: 'peers', peers: Object.keys(connectedPeers) });
-    });
-
-    // listen data
-    conn.on('data', data => {
-        if (data.label === 'peers') {} else {
-            __WEBPACK_IMPORTED_MODULE_2_jquery___default()("#chat ul").append(createText(data));
-        }
-    });
-});
-
-peer.on('open', id => {
-    console.log('My peer id is', id);
-});
-
-// connect button
-__WEBPACK_IMPORTED_MODULE_2_jquery___default()('#btnConnect').click(() => {
-    // get id from input
-    const friendId = __WEBPACK_IMPORTED_MODULE_2_jquery___default()('#txtFriendId').val();
-
+//
+function connectAndListen(friendId) {
     // connect to friend via id
     connectedPeers[friendId] = peer.connect(friendId);
 
@@ -1581,23 +1568,65 @@ __WEBPACK_IMPORTED_MODULE_2_jquery___default()('#btnConnect').click(() => {
             for (let p in data.peers) {
                 if (data.peers[p] !== myId) {
                     connectedPeers[data.peers[p]] = peer.connect(data.peers[p]);
-                    console.log(connectedPeers[data.peers[p]]);
-                    connectedPeers[data.peers[p]].on('data', data2 => {
-                        console.log(data2);
-                        if (data2.label !== 'peers') {
-                            __WEBPACK_IMPORTED_MODULE_2_jquery___default()("#chat ul").append(createText(data2));
+                    connectedPeers[data.peers[p]].on('data', subData => {
+                        if (subData.label !== 'peers') {
+                            appendData(subData);
                         }
                     });
                 }
             }
         } else {
-            __WEBPACK_IMPORTED_MODULE_2_jquery___default()("#chat ul").append(createText(data));
+            appendData(data);
         }
     });
+}
+
+// listen connection
+peer.on('connection', function (conn) {
+    // update status text
+    __WEBPACK_IMPORTED_MODULE_2_jquery___default()('#connectStatus').removeClass().addClass('text-info').html(conn.peer + ' connected with me.');
+    // show chat box
+    __WEBPACK_IMPORTED_MODULE_2_jquery___default()('#chat').show();
+
+    // activate open cam button, disable connect button
+    __WEBPACK_IMPORTED_MODULE_2_jquery___default()('#btnCam').removeAttr('disabled');
+    __WEBPACK_IMPORTED_MODULE_2_jquery___default()('#btnConnect').attr('disabled', 'disabled');
+
+    console.log(conn.peer + ' bana bağlandı.');
+
+    // connect
+    connectedPeers[conn.peer] = conn;
+
+    conn.on('open', () => {
+        conn.send({ label: 'peers', peers: Object.keys(connectedPeers) });
+    });
+
+    // listen data
+    conn.on('data', data => {
+        appendData(data);
+    });
+});
+
+peer.on('open', id => {
+    console.log('My peer id is', id);
+});
+
+// listen connect button
+__WEBPACK_IMPORTED_MODULE_2_jquery___default()('#btnConnect').click(() => {
+    // get id from input
+    const friendId = __WEBPACK_IMPORTED_MODULE_2_jquery___default()('#txtFriendId').val();
+
+    // activate open cam button, disable connect button
+    __WEBPACK_IMPORTED_MODULE_2_jquery___default()('#btnCam').removeAttr('disabled');
+    __WEBPACK_IMPORTED_MODULE_2_jquery___default()('#btnConnect').attr('disabled', 'disabled');
+
+    connectAndListen(friendId);
 
     // if connected
     if (connectedPeers[friendId].peer !== '') {
+        // update status text
         __WEBPACK_IMPORTED_MODULE_2_jquery___default()('#connectStatus').removeClass().addClass('text-success').html('Connected with ' + friendId);
+        // show chat box
         __WEBPACK_IMPORTED_MODULE_2_jquery___default()('#chat').show();
     }
 });
@@ -1616,6 +1645,35 @@ __WEBPACK_IMPORTED_MODULE_2_jquery___default()("#message").on("keyup", function 
             __WEBPACK_IMPORTED_MODULE_2_jquery___default()(this).val('');
         }
     }
+});
+
+// listen open cam button
+__WEBPACK_IMPORTED_MODULE_2_jquery___default()('#btnCam').click(() => {
+    // show cams
+    __WEBPACK_IMPORTED_MODULE_2_jquery___default()('#cams').show();
+    // disable cam button
+    __WEBPACK_IMPORTED_MODULE_2_jquery___default()('#btnCam').attr('disabled', 'disabled');
+    __WEBPACK_IMPORTED_MODULE_3__openStream___default()(stream => {
+        createVideo('localStream');
+        __WEBPACK_IMPORTED_MODULE_4__playVideo___default()(stream, 'localStream');
+        for (let p in connectedPeers) {
+            console.log(connectedPeers[p].peer + ' aranıyor.');
+            const call = peer.call(connectedPeers[p].peer, stream);
+        }
+    });
+});
+
+// call answer
+peer.on('call', call => {
+    // show cams
+    __WEBPACK_IMPORTED_MODULE_2_jquery___default()('#cams').show();
+    createVideo(call.peer);
+    __WEBPACK_IMPORTED_MODULE_3__openStream___default()(stream => {
+        call.answer(stream);
+        call.on('stream', remoteStream => {
+            __WEBPACK_IMPORTED_MODULE_4__playVideo___default()(remoteStream, call.peer);
+        });
+    });
 });
 
 /***/ }),
@@ -12966,6 +13024,30 @@ var __WEBPACK_AMD_DEFINE_ARRAY__, __WEBPACK_AMD_DEFINE_RESULT__;/*!
 
 	return jQuery;
 });
+
+/***/ }),
+/* 15 */
+/***/ (function(module, exports) {
+
+function openStream(callbak) {
+    navigator.mediaDevices.getUserMedia({ audio: false, video: true }).then(stream => {
+        callbak(stream);
+    }).catch(error => console.log(error));
+}
+
+module.exports = openStream;
+
+/***/ }),
+/* 16 */
+/***/ (function(module, exports) {
+
+function playVdeo(stream, idVideo) {
+    const video = document.getElementById(idVideo);
+    video.srcObject = stream;
+    video.play();
+}
+
+module.exports = playVdeo;
 
 /***/ })
 /******/ ]);

@@ -95,3 +95,10 @@ input:focus{
 #chat {
     display: none;
 }
+
+#cams {
+    display: none;
+}
+#cams video{
+    width: 100%;
+}
