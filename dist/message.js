@@ -1526,42 +1526,96 @@ Object.defineProperty(__webpack_exports__, "__esModule", { value: true });
 
 
 
-function getPeer() {
-    const myId = __WEBPACK_IMPORTED_MODULE_1_uid___default()(10);
-    __WEBPACK_IMPORTED_MODULE_2_jquery___default()('#myPeerId').html(myId);
-    return myId;
-}
+let myId = null;
+let connectedPeers = {};
 
 const config = { host: 'peerjs-.herokuapp.com', port: 443, secure: true, key: 'peerjs' };
 const peer = new __WEBPACK_IMPORTED_MODULE_0_peerjs___default.a(getPeer(), config);
 
-let $conn = null;
+function getPeer() {
+    myId = __WEBPACK_IMPORTED_MODULE_1_uid___default()(10);
+    __WEBPACK_IMPORTED_MODULE_2_jquery___default()('#myPeerId').html(myId);
+    return myId;
+}
 
-__WEBPACK_IMPORTED_MODULE_2_jquery___default()('#btnConnect').click(() => {
-    const friendId = __WEBPACK_IMPORTED_MODULE_2_jquery___default()('#txtFriendId').val();
+function createText(data) {
+    const text = '<li style="width:100%">' + '<div class="msj-rta macro">' + '<div class="avatar">' + '<img class="img-circle" style="width:100%;" src="https://cdn0.iconfinder.com/data/icons/iconshock_guys/512/matthew.png" /></div>' + '<div class="text text-r">' + '<p>' + data.message + '</p>' + '<p><small>' + data.id + '</small></p>' + '</div>' + '</div>' + '</li>';
+    return text;
+}
 
-    $conn = peer.connect(friendId);
-
-    if ($conn) {
-        console.log('Connected!');
-    }
-});
-
-__WEBPACK_IMPORTED_MODULE_2_jquery___default()('#btnSend').click(() => {
-    const message = __WEBPACK_IMPORTED_MODULE_2_jquery___default()('#message').val();
-
-    $conn.send(message);
-});
-
+// listen connection
 peer.on('connection', function (conn) {
-    console.log('Connected!');
+    __WEBPACK_IMPORTED_MODULE_2_jquery___default()('#connectStatus').removeClass().addClass('text-info').html(conn.peer + ' connected with me.');
+    __WEBPACK_IMPORTED_MODULE_2_jquery___default()('#txtFriendId').val(conn.peer);
+    __WEBPACK_IMPORTED_MODULE_2_jquery___default()('#chat').show();
+    connectedPeers[conn.peer] = conn;
+
+    console.log(conn.peer + ' bana bağlandı.');
+
+    conn.on('open', () => {
+        conn.send({ label: 'peers', peers: Object.keys(connectedPeers) });
+    });
+
+    // listen data
     conn.on('data', data => {
-        console.log('Received', data);
+        if (data.label === 'peers') {} else {
+            __WEBPACK_IMPORTED_MODULE_2_jquery___default()("#chat ul").append(createText(data));
+        }
     });
 });
 
 peer.on('open', id => {
     console.log('My peer id is', id);
+});
+
+// connect button
+__WEBPACK_IMPORTED_MODULE_2_jquery___default()('#btnConnect').click(() => {
+    // get id from input
+    const friendId = __WEBPACK_IMPORTED_MODULE_2_jquery___default()('#txtFriendId').val();
+
+    // connect to friend via id
+    connectedPeers[friendId] = peer.connect(friendId);
+
+    connectedPeers[friendId].on('data', data => {
+        if (data.label === 'peers') {
+            for (let p in data.peers) {
+                if (data.peers[p] !== myId) {
+                    connectedPeers[data.peers[p]] = peer.connect(data.peers[p]);
+                    console.log(connectedPeers[data.peers[p]]);
+                    connectedPeers[data.peers[p]].on('data', data2 => {
+                        console.log(data2);
+                        if (data2.label !== 'peers') {
+                            __WEBPACK_IMPORTED_MODULE_2_jquery___default()("#chat ul").append(createText(data2));
+                        }
+                    });
+                }
+            }
+        } else {
+            __WEBPACK_IMPORTED_MODULE_2_jquery___default()("#chat ul").append(createText(data));
+        }
+    });
+
+    // if connected
+    if (connectedPeers[friendId].peer !== '') {
+        __WEBPACK_IMPORTED_MODULE_2_jquery___default()('#connectStatus').removeClass().addClass('text-success').html('Connected with ' + friendId);
+        __WEBPACK_IMPORTED_MODULE_2_jquery___default()('#chat').show();
+    }
+});
+
+// listen message input
+__WEBPACK_IMPORTED_MODULE_2_jquery___default()("#message").on("keyup", function (e) {
+    if (e.which === 13) {
+        const message = __WEBPACK_IMPORTED_MODULE_2_jquery___default()(this).val();
+        if (message !== "") {
+            // send message
+            for (var connectedPeer in connectedPeers) {
+                const c = connectedPeers[connectedPeer];
+                c.send({ message: message, id: myId });
+            }
+            __WEBPACK_IMPORTED_MODULE_2_jquery___default()("#chat ul").append(createText({ message: message, id: 'Ben' }));
+            __WEBPACK_IMPORTED_MODULE_2_jquery___default()(this).val('');
+        }
+    }
 });
 
 /***/ }),
