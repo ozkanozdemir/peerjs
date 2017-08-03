@@ -1518,162 +1518,122 @@ module.exports = Negotiator;
 Object.defineProperty(__webpack_exports__, "__esModule", { value: true });
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_0_peerjs__ = __webpack_require__(7);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_0_peerjs___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_0_peerjs__);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1_uid__ = __webpack_require__(13);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1_uid___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_1_uid__);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_2_jquery__ = __webpack_require__(14);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_2_jquery___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_2_jquery__);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_3__openStream__ = __webpack_require__(15);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_3__openStream___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_3__openStream__);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_4__playVideo__ = __webpack_require__(16);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_4__playVideo___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_4__playVideo__);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1_jquery__ = __webpack_require__(14);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1_jquery___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_1_jquery__);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_2__modules__ = __webpack_require__(17);
+var _this = this;
+
+// core
 
 
 
-
+// import modules
 
 
 let myId = null;
 let connectedPeers = {};
 
 const config = { host: 'peerjs-.herokuapp.com', port: 443, secure: true, key: 'peerjs' };
-const peer = new __WEBPACK_IMPORTED_MODULE_0_peerjs___default.a(getPeerId(), config);
-
-function getPeerId() {
-    myId = __WEBPACK_IMPORTED_MODULE_1_uid___default()(10);
-    __WEBPACK_IMPORTED_MODULE_2_jquery___default()('#myPeerId').html(myId);
-    return myId;
-}
-
-function createText(data) {
-    const text = '<li style="width:100%">' + '<div class="msj-rta macro">' + '<div class="avatar">' + '<img class="img-circle" style="width:100%;" src="https://cdn0.iconfinder.com/data/icons/iconshock_guys/512/matthew.png" /></div>' + '<div class="text text-r">' + '<p>' + data.message + '</p>' + '<p><small>' + data.id + '</small></p>' + '</div>' + '</div>' + '</li>';
-    return text;
-}
-
-function createVideo(id) {
-    const video = '<div class="col-xs-6">' + 'Id : ' + id + '<video id="' + id + '" controls></video>' + '</div>';
-    __WEBPACK_IMPORTED_MODULE_2_jquery___default()("#cams").append(video);
-}
-
-function appendData(data) {
-    __WEBPACK_IMPORTED_MODULE_2_jquery___default()("#chat ul").append(createText(data));
-}
-
-//
-function connectAndListen(friendId) {
-    // connect to friend via id
-    connectedPeers[friendId] = peer.connect(friendId);
-
-    connectedPeers[friendId].on('data', data => {
-        if (data.label === 'peers') {
-            for (let p in data.peers) {
-                if (data.peers[p] !== myId) {
-                    connectedPeers[data.peers[p]] = peer.connect(data.peers[p]);
-                    connectedPeers[data.peers[p]].on('data', subData => {
-                        if (subData.label !== 'peers') {
-                            appendData(subData);
-                        }
-                    });
-                }
-            }
-        } else {
-            appendData(data);
-        }
-    });
-}
+const peer = new __WEBPACK_IMPORTED_MODULE_0_peerjs___default.a(Object(__WEBPACK_IMPORTED_MODULE_2__modules__["e" /* getPeerId */])(), config);
 
 // listen connection
-peer.on('connection', function (conn) {
+peer.on('connection', conn => {
     // update status text
-    __WEBPACK_IMPORTED_MODULE_2_jquery___default()('#connectStatus').removeClass().addClass('text-info').html(conn.peer + ' connected with me.');
+    __WEBPACK_IMPORTED_MODULE_1_jquery___default()('#connectStatus').removeClass().addClass('text-info').html(conn.peer + ' connected with me.');
     // show chat box
-    __WEBPACK_IMPORTED_MODULE_2_jquery___default()('#chat').show();
+    __WEBPACK_IMPORTED_MODULE_1_jquery___default()('#chat').show();
 
     // activate open cam button, disable connect button
-    __WEBPACK_IMPORTED_MODULE_2_jquery___default()('#btnCam').removeAttr('disabled');
-    __WEBPACK_IMPORTED_MODULE_2_jquery___default()('#btnConnect').attr('disabled', 'disabled');
+    __WEBPACK_IMPORTED_MODULE_1_jquery___default()('#btnCam').removeAttr('disabled');
+    __WEBPACK_IMPORTED_MODULE_1_jquery___default()('#btnConnect').attr('disabled', 'disabled');
 
     console.log(conn.peer + ' bana bağlandı.');
 
     // connect
     connectedPeers[conn.peer] = conn;
 
+    // listen open status of connecting
     conn.on('open', () => {
         conn.send({ label: 'peers', peers: Object.keys(connectedPeers) });
     });
 
     // listen data
     conn.on('data', data => {
-        appendData(data);
+        Object(__WEBPACK_IMPORTED_MODULE_2__modules__["a" /* appendData */])(data);
     });
 });
 
+// listen open status of the peer object
 peer.on('open', id => {
     console.log('My peer id is', id);
 });
 
 // listen connect button
-__WEBPACK_IMPORTED_MODULE_2_jquery___default()('#btnConnect').click(() => {
+__WEBPACK_IMPORTED_MODULE_1_jquery___default()('#btnConnect').click(() => {
     // get id from input
-    const friendId = __WEBPACK_IMPORTED_MODULE_2_jquery___default()('#txtFriendId').val();
+    const friendId = __WEBPACK_IMPORTED_MODULE_1_jquery___default()('#txtFriendId').val();
 
     // activate open cam button, disable connect button
-    __WEBPACK_IMPORTED_MODULE_2_jquery___default()('#btnCam').removeAttr('disabled');
-    __WEBPACK_IMPORTED_MODULE_2_jquery___default()('#btnConnect').attr('disabled', 'disabled');
+    __WEBPACK_IMPORTED_MODULE_1_jquery___default()('#btnCam').removeAttr('disabled');
+    __WEBPACK_IMPORTED_MODULE_1_jquery___default()('#btnConnect').attr('disabled', 'disabled');
 
-    connectAndListen(friendId);
+    // run connect and listen function
+    Object(__WEBPACK_IMPORTED_MODULE_2__modules__["b" /* connectAndListen */])(friendId);
 
     // if connected
     if (connectedPeers[friendId].peer !== '') {
         // update status text
-        __WEBPACK_IMPORTED_MODULE_2_jquery___default()('#connectStatus').removeClass().addClass('text-success').html('Connected with ' + friendId);
+        __WEBPACK_IMPORTED_MODULE_1_jquery___default()('#connectStatus').removeClass().addClass('text-success').html('Connected with ' + friendId);
         // show chat box
-        __WEBPACK_IMPORTED_MODULE_2_jquery___default()('#chat').show();
+        __WEBPACK_IMPORTED_MODULE_1_jquery___default()('#chat').show();
     }
 });
 
 // listen message input
-__WEBPACK_IMPORTED_MODULE_2_jquery___default()("#message").on("keyup", function (e) {
+__WEBPACK_IMPORTED_MODULE_1_jquery___default()("#message").on("keyup", e => {
     if (e.which === 13) {
-        const message = __WEBPACK_IMPORTED_MODULE_2_jquery___default()(this).val();
+        const message = __WEBPACK_IMPORTED_MODULE_1_jquery___default()(_this).val();
         if (message !== "") {
             // send message
             for (var connectedPeer in connectedPeers) {
                 const c = connectedPeers[connectedPeer];
                 c.send({ message: message, id: myId });
             }
-            __WEBPACK_IMPORTED_MODULE_2_jquery___default()("#chat ul").append(createText({ message: message, id: 'Ben' }));
-            __WEBPACK_IMPORTED_MODULE_2_jquery___default()(this).val('');
+            __WEBPACK_IMPORTED_MODULE_1_jquery___default()("#chat ul").append(Object(__WEBPACK_IMPORTED_MODULE_2__modules__["c" /* createText */])({ message: message, id: 'Ben' }));
+            __WEBPACK_IMPORTED_MODULE_1_jquery___default()(_this).val('');
         }
     }
 });
 
 // listen open cam button
-__WEBPACK_IMPORTED_MODULE_2_jquery___default()('#btnCam').click(() => {
+__WEBPACK_IMPORTED_MODULE_1_jquery___default()('#btnCam').click(() => {
     // show cams
-    __WEBPACK_IMPORTED_MODULE_2_jquery___default()('#cams').show();
+    __WEBPACK_IMPORTED_MODULE_1_jquery___default()('#cams').show();
     // disable cam button
-    __WEBPACK_IMPORTED_MODULE_2_jquery___default()('#btnCam').attr('disabled', 'disabled');
-    __WEBPACK_IMPORTED_MODULE_3__openStream___default()(stream => {
-        createVideo('localStream');
-        __WEBPACK_IMPORTED_MODULE_4__playVideo___default()(stream, 'localStream');
+    __WEBPACK_IMPORTED_MODULE_1_jquery___default()('#btnCam').attr('disabled', 'disabled');
+    // create video element for local stream
+    Object(__WEBPACK_IMPORTED_MODULE_2__modules__["d" /* createVideo */])('localStream');
+    // open local stream
+    Object(__WEBPACK_IMPORTED_MODULE_2__modules__["f" /* openStream */])(stream => {
+        Object(__WEBPACK_IMPORTED_MODULE_2__modules__["g" /* playVideo */])(stream, 'localStream');
+        // send local stream to the others
         for (let p in connectedPeers) {
-            console.log(connectedPeers[p].peer + ' aranıyor.');
             const call = peer.call(connectedPeers[p].peer, stream);
+            call.on('answer', answer => console.log(answer));
         }
     });
 });
 
-// call answer
+// listen call of peer object
 peer.on('call', call => {
     // show cams
-    __WEBPACK_IMPORTED_MODULE_2_jquery___default()('#cams').show();
-    createVideo(call.peer);
-    __WEBPACK_IMPORTED_MODULE_3__openStream___default()(stream => {
-        call.answer(stream);
-        call.on('stream', remoteStream => {
-            __WEBPACK_IMPORTED_MODULE_4__playVideo___default()(remoteStream, call.peer);
-        });
-    });
+    __WEBPACK_IMPORTED_MODULE_1_jquery___default()('#cams').show();
+    // create video element for remote stream
+    Object(__WEBPACK_IMPORTED_MODULE_2__modules__["d" /* createVideo */])(call.peer);
+    // send answer to the call
+    call.answer('success');
+    // listen stream of the call
+    call.on('stream', remoteStream => Object(__WEBPACK_IMPORTED_MODULE_2__modules__["g" /* playVideo */])(remoteStream, call.peer));
 });
 
 /***/ }),
@@ -13026,28 +12986,85 @@ var __WEBPACK_AMD_DEFINE_ARRAY__, __WEBPACK_AMD_DEFINE_RESULT__;/*!
 });
 
 /***/ }),
-/* 15 */
-/***/ (function(module, exports) {
+/* 15 */,
+/* 16 */,
+/* 17 */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
 
+"use strict";
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "f", function() { return openStream; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "g", function() { return playVideo; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "e", function() { return getPeerId; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "c", function() { return createText; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "d", function() { return createVideo; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "a", function() { return appendData; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "b", function() { return connectAndListen; });
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0_uid__ = __webpack_require__(13);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0_uid___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_0_uid__);
+
+
+// open stream of user browser
 function openStream(callbak) {
     navigator.mediaDevices.getUserMedia({ audio: false, video: true }).then(stream => {
         callbak(stream);
     }).catch(error => console.log(error));
 }
 
-module.exports = openStream;
-
-/***/ }),
-/* 16 */
-/***/ (function(module, exports) {
-
-function playVdeo(stream, idVideo) {
+// play video
+function playVideo(stream, idVideo) {
     const video = document.getElementById(idVideo);
     video.srcObject = stream;
     video.play();
 }
 
-module.exports = playVdeo;
+// create and get peer id (unique)
+function getPeerId() {
+    myId = __WEBPACK_IMPORTED_MODULE_0_uid___default()(10);
+    $('#myPeerId').html(myId);
+    return myId;
+}
+
+// create the chat dom
+function createText(data) {
+    const text = '<li style="width:100%">' + '<div class="msj-rta macro">' + '<div class="avatar">' + '<img class="img-circle" style="width:100%;" src="https://cdn0.iconfinder.com/data/icons/iconshock_guys/512/matthew.png" /></div>' + '<div class="text text-r">' + '<p>' + data.message + '</p>' + '<p><small>' + data.id + '</small></p>' + '</div>' + '</div>' + '</li>';
+    return text;
+}
+
+// create and append video element
+function createVideo(id) {
+    const video = '<div class="col-xs-6">' + 'Id : ' + id + '<video id="' + id + '" controls></video>' + '</div>';
+    $("#cams").append(video);
+}
+
+// append the data to chat box
+function appendData(data) {
+    $("#chat ul").append(createText(data));
+}
+
+// connect all peers and listen them
+function connectAndListen(friendId) {
+    // connect to friend via id
+    connectedPeers[friendId] = peer.connect(friendId);
+
+    connectedPeers[friendId].on('data', data => {
+        if (data.label === 'peers') {
+            for (let p in data.peers) {
+                if (data.peers[p] !== myId) {
+                    connectedPeers[data.peers[p]] = peer.connect(data.peers[p]);
+                    connectedPeers[data.peers[p]].on('data', subData => {
+                        if (subData.label !== 'peers') {
+                            appendData(subData);
+                        }
+                    });
+                }
+            }
+        } else {
+            appendData(data);
+        }
+    });
+}
+
+
 
 /***/ })
 /******/ ]);

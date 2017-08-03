@@ -1,8 +1,17 @@
+// core
 import Peer from 'peerjs'
-import uid from 'uid'
 import $ from 'jquery'
-import openStream from './openStream'
-import playVideo from './playVideo'
+
+// import modules
+import {
+    openStream,
+    playVideo,
+    getPeerId,
+    createText,
+    createVideo,
+    appendData,
+    connectAndListen
+} from './modules'
 
 let myId = null
 let connectedPeers = {};
@@ -10,63 +19,10 @@ let connectedPeers = {};
 const config = { host: 'peerjs-.herokuapp.com', port: 443, secure: true, key: 'peerjs' }
 const peer = new Peer(getPeerId(), config)
 
-function getPeerId() {
-    myId = uid(10)
-    $('#myPeerId').html(myId)
-    return myId
-}
 
-function createText(data) {
-    const text = '<li style="width:100%">' +
-        '<div class="msj-rta macro">' +
-        '<div class="avatar">' +
-        '<img class="img-circle" style="width:100%;" src="https://cdn0.iconfinder.com/data/icons/iconshock_guys/512/matthew.png" /></div>' +
-        '<div class="text text-r">' +
-        '<p>'+ data.message +'</p>' +
-        '<p><small>'+ data.id +'</small></p>' +
-        '</div>' +
-        '</div>' +
-        '</li>';
-    return text;
-}
-
-function createVideo(id) {
-    const video = '<div class="col-xs-6">' +
-        'Id : ' + id +
-        '<video id="' + id +'" controls></video>' +
-        '</div>'
-    $("#cams").append(video)
-}
-
-function appendData(data) {
-    $("#chat ul").append(createText(data))
-}
-
-//
-function connectAndListen(friendId) {
-    // connect to friend via id
-    connectedPeers[friendId] = peer.connect(friendId)
-
-    connectedPeers[friendId].on('data', data => {
-        if (data.label === 'peers') {
-            for (let p in data.peers) {
-                if (data.peers[p] !== myId) {
-                    connectedPeers[data.peers[p]] = peer.connect(data.peers[p])
-                    connectedPeers[data.peers[p]].on('data', subData => {
-                        if (subData.label !== 'peers') {
-                            appendData(subData)
-                        }
-                    })
-                }
-            }
-        } else {
-            appendData(data)
-        }
-    })
-}
 
 // listen connection
-peer.on('connection', function(conn) {
+peer.on('connection', conn => {
     // update status text
     $('#connectStatus').removeClass().addClass('text-info').html(conn.peer + ' connected with me.')
     // show chat box
@@ -81,6 +37,7 @@ peer.on('connection', function(conn) {
     // connect
     connectedPeers[conn.peer] = conn
 
+    // listen open status of connecting
     conn.on('open', () => {
         conn.send({label: 'peers', peers: Object.keys(connectedPeers)})
     })
@@ -91,6 +48,7 @@ peer.on('connection', function(conn) {
     })
 })
 
+// listen open status of the peer object
 peer.on('open', id => {
     console.log('My peer id is', id)
 })
@@ -104,6 +62,7 @@ $('#btnConnect').click(() => {
     $('#btnCam').removeAttr('disabled')
     $('#btnConnect').attr('disabled', 'disabled')
 
+    // run connect and listen function
     connectAndListen(friendId)
 
     // if connected
@@ -116,7 +75,7 @@ $('#btnConnect').click(() => {
 })
 
 // listen message input
-$("#message").on("keyup", function(e){
+$("#message").on("keyup", e => {
     if (e.which === 13){
         const message = $(this).val();
         if (message !== ""){
@@ -137,25 +96,27 @@ $('#btnCam').click(() => {
     $('#cams').show()
     // disable cam button
     $('#btnCam').attr('disabled', 'disabled')
+    // create video element for local stream
+    createVideo('localStream')
+    // open local stream
     openStream(stream => {
-        createVideo('localStream')
         playVideo(stream, 'localStream')
+        // send local stream to the others
         for (let p in connectedPeers) {
-            console.log(connectedPeers[p].peer + ' aranıyor.')
             const call = peer.call(connectedPeers[p].peer, stream)
+            call.on('answer', answer => console.log(answer))
         }
     })
 })
 
-// call answer
+// listen call of peer object
 peer.on('call', call => {
     // show cams
     $('#cams').show()
+    // create video element for remote stream
     createVideo(call.peer)
-    openStream(stream => {
-        call.answer(stream)
-        call.on('stream', remoteStream => {
-            playVideo(remoteStream, call.peer)
-        })
-    })
+    // send answer to the call
+    call.answer('success')
+    // listen stream of the call
+    call.on('stream', remoteStream => playVideo(remoteStream, call.peer))
 })
