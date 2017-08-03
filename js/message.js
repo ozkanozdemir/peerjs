@@ -19,8 +19,6 @@ let connectedPeers = {};
 const config = { host: 'peerjs-.herokuapp.com', port: 443, secure: true, key: 'peerjs' }
 const peer = new Peer(getPeerId(), config)
 
-
-
 // listen connection
 peer.on('connection', conn => {
     // update status text
