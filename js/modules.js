@@ -1,11 +1,13 @@
 import uid from 'uid'
+import $ from 'jquery'
+
+let myId = null
 
 // open stream of user browser
 function openStream(callbak) {
     navigator.mediaDevices.getUserMedia({ audio: false, video: true })
         .then(stream => {
             callbak(stream)
-
         })
         .catch(error => console.log(error))
 }
@@ -53,28 +55,41 @@ function appendData(data) {
     $("#chat ul").append(createText(data))
 }
 
-// connect all peers and listen them
-function connectAndListen(friendId) {
-    // connect to friend via id
-    connectedPeers[friendId] = peer.connect(friendId)
+// remove disabled attr from cam buttons
+function activeCamButtons() {
+    $('.btnCam').removeAttr('disabled')
+    $('#btnCamRequest').removeAttr('disabled')
+    $('#txtFriendIdForRequest').removeAttr('disabled')
+}
 
-    connectedPeers[friendId].on('data', data => {
-        if (data.label === 'peers') {
+// listen data
+function listenData(conn, peer = null, connectedPeers = null) {
+    conn.on('data', data => {
+        if (data.label === 'message') {
+            appendData(data)
+        } else if (data.label === 'camRequest') {
+            appendData({message: data.id + ' sent open cam request. <button class="btn btn-primary" class="btnCam">Open Cam</button>', id: data.id})
+        } else if (data.label === 'peers') {
+            console.log(data.peers)
             for (let p in data.peers) {
-                if (data.peers[p] !== myId) {
+                if (data.peers[p] !== peer.id) {
+                    console.log(1)
                     connectedPeers[data.peers[p]] = peer.connect(data.peers[p])
                     connectedPeers[data.peers[p]].on('data', subData => {
-                        if (subData.label !== 'peers') {
+                        if (subData.label === 'message') {
                             appendData(subData)
                         }
                     })
                 }
             }
-        } else {
-            appendData(data)
         }
     })
+
+    if (connectedPeers !== null) {
+        return connectedPeers
+    }
 }
+
 
 export {
     openStream,
@@ -83,5 +98,6 @@ export {
     createText,
     createVideo,
     appendData,
-    connectAndListen
+    activeCamButtons,
+    listenData
 }

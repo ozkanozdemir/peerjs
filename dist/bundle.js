@@ -60,7 +60,7 @@
 /******/ 	__webpack_require__.p = "";
 /******/
 /******/ 	// Load entry module and return exports
-/******/ 	return __webpack_require__(__webpack_require__.s = 6);
+/******/ 	return __webpack_require__(__webpack_require__.s = 7);
 /******/ })
 /************************************************************************/
 /******/ ([
@@ -1512,1579 +1512,6 @@ module.exports = Negotiator;
 
 /***/ }),
 /* 6 */
-/***/ (function(module, __webpack_exports__, __webpack_require__) {
-
-"use strict";
-Object.defineProperty(__webpack_exports__, "__esModule", { value: true });
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0_peerjs__ = __webpack_require__(7);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0_peerjs___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_0_peerjs__);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1_uid__ = __webpack_require__(13);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1_uid___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_1_uid__);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_2_jquery__ = __webpack_require__(14);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_2_jquery___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_2_jquery__);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_3__openStream__ = __webpack_require__(15);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_3__openStream___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_3__openStream__);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_4__playVideo__ = __webpack_require__(16);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_4__playVideo___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_4__playVideo__);
-
-
-
-
-
-
-function getPeer() {
-    const myId = __WEBPACK_IMPORTED_MODULE_1_uid___default()(10);
-    __WEBPACK_IMPORTED_MODULE_2_jquery___default()('#myPeerId').html(myId);
-    return myId;
-}
-
-const config = { host: 'peerjs-.herokuapp.com', port: 443, secure: true, key: 'peerjs' };
-const peer = new __WEBPACK_IMPORTED_MODULE_0_peerjs___default.a(getPeer(), config);
-
-__WEBPACK_IMPORTED_MODULE_2_jquery___default()('#btnCall').click(() => {
-    const friendId = __WEBPACK_IMPORTED_MODULE_2_jquery___default()('#txtFriendId').val();
-
-    __WEBPACK_IMPORTED_MODULE_3__openStream___default()(stream => {
-        __WEBPACK_IMPORTED_MODULE_4__playVideo___default()(stream, 'localStream');
-        const call = peer.call(friendId, stream);
-
-        console.log(call);
-
-        call.on('stream', remoteStream => __WEBPACK_IMPORTED_MODULE_4__playVideo___default()(remoteStream, 'friendStream'));
-    });
-});
-
-peer.on('call', call => {
-    __WEBPACK_IMPORTED_MODULE_3__openStream___default()(stream => {
-        __WEBPACK_IMPORTED_MODULE_4__playVideo___default()(stream, 'localStream');
-        call.answer(stream);
-        call.on('stream', remoteStream => __WEBPACK_IMPORTED_MODULE_4__playVideo___default()(remoteStream, 'friendStream'));
-
-        console.log(call);
-    });
-});
-
-/***/ }),
-/* 7 */
-/***/ (function(module, exports, __webpack_require__) {
-
-var util = __webpack_require__(0);
-var EventEmitter = __webpack_require__(2);
-var Socket = __webpack_require__(8);
-var MediaConnection = __webpack_require__(9);
-var DataConnection = __webpack_require__(10);
-
-/**
- * A peer who can initiate connections with other peers.
- */
-function Peer(id, options) {
-  if (!(this instanceof Peer)) return new Peer(id, options);
-  EventEmitter.call(this);
-
-  // Deal with overloading
-  if (id && id.constructor == Object) {
-    options = id;
-    id = undefined;
-  } else if (id) {
-    // Ensure id is a string
-    id = id.toString();
-  }
-  //
-
-  // Configurize options
-  options = util.extend({
-    debug: 0, // 1: Errors, 2: Warnings, 3: All logs
-    host: util.CLOUD_HOST,
-    port: util.CLOUD_PORT,
-    key: 'peerjs',
-    path: '/',
-    token: util.randomToken(),
-    config: util.defaultConfig
-  }, options);
-  this.options = options;
-  // Detect relative URL host.
-  if (options.host === '/') {
-    options.host = window.location.hostname;
-  }
-  // Set path correctly.
-  if (options.path[0] !== '/') {
-    options.path = '/' + options.path;
-  }
-  if (options.path[options.path.length - 1] !== '/') {
-    options.path += '/';
-  }
-
-  // Set whether we use SSL to same as current host
-  if (options.secure === undefined && options.host !== util.CLOUD_HOST) {
-    options.secure = util.isSecure();
-  }
-  // Set a custom log function if present
-  if (options.logFunction) {
-    util.setLogFunction(options.logFunction);
-  }
-  util.setLogLevel(options.debug);
-  //
-
-  // Sanity checks
-  // Ensure WebRTC supported
-  if (!util.supports.audioVideo && !util.supports.data) {
-    this._delayedAbort('browser-incompatible', 'The current browser does not support WebRTC');
-    return;
-  }
-  // Ensure alphanumeric id
-  if (!util.validateId(id)) {
-    this._delayedAbort('invalid-id', 'ID "' + id + '" is invalid');
-    return;
-  }
-  // Ensure valid key
-  if (!util.validateKey(options.key)) {
-    this._delayedAbort('invalid-key', 'API KEY "' + options.key + '" is invalid');
-    return;
-  }
-  // Ensure not using unsecure cloud server on SSL page
-  if (options.secure && options.host === '0.peerjs.com') {
-    this._delayedAbort('ssl-unavailable', 'The cloud server currently does not support HTTPS. Please run your own PeerServer to use HTTPS.');
-    return;
-  }
-  //
-
-  // States.
-  this.destroyed = false; // Connections have been killed
-  this.disconnected = false; // Connection to PeerServer killed but P2P connections still active
-  this.open = false; // Sockets and such are not yet open.
-  //
-
-  // References
-  this.connections = {}; // DataConnections for this peer.
-  this._lostMessages = {}; // src => [list of messages]
-  //
-
-  // Start the server connection
-  this._initializeServerConnection();
-  if (id) {
-    this._initialize(id);
-  } else {
-    this._retrieveId();
-  }
-  //
-}
-
-util.inherits(Peer, EventEmitter);
-
-// Initialize the 'socket' (which is actually a mix of XHR streaming and
-// websockets.)
-Peer.prototype._initializeServerConnection = function () {
-  var self = this;
-  this.socket = new Socket(this.options.secure, this.options.host, this.options.port, this.options.path, this.options.key);
-  this.socket.on('message', function (data) {
-    self._handleMessage(data);
-  });
-  this.socket.on('error', function (error) {
-    self._abort('socket-error', error);
-  });
-  this.socket.on('disconnected', function () {
-    // If we haven't explicitly disconnected, emit error and disconnect.
-    if (!self.disconnected) {
-      self.emitError('network', 'Lost connection to server.');
-      self.disconnect();
-    }
-  });
-  this.socket.on('close', function () {
-    // If we haven't explicitly disconnected, emit error.
-    if (!self.disconnected) {
-      self._abort('socket-closed', 'Underlying socket is already closed.');
-    }
-  });
-};
-
-/** Get a unique ID from the server via XHR. */
-Peer.prototype._retrieveId = function (cb) {
-  var self = this;
-  var http = new XMLHttpRequest();
-  var protocol = this.options.secure ? 'https://' : 'http://';
-  var url = protocol + this.options.host + ':' + this.options.port + this.options.path + this.options.key + '/id';
-  var queryString = '?ts=' + new Date().getTime() + '' + Math.random();
-  url += queryString;
-
-  // If there's no ID we need to wait for one before trying to init socket.
-  http.open('get', url, true);
-  http.onerror = function (e) {
-    util.error('Error retrieving ID', e);
-    var pathError = '';
-    if (self.options.path === '/' && self.options.host !== util.CLOUD_HOST) {
-      pathError = ' If you passed in a `path` to your self-hosted PeerServer, ' + 'you\'ll also need to pass in that same path when creating a new ' + 'Peer.';
-    }
-    self._abort('server-error', 'Could not get an ID from the server.' + pathError);
-  };
-  http.onreadystatechange = function () {
-    if (http.readyState !== 4) {
-      return;
-    }
-    if (http.status !== 200) {
-      http.onerror();
-      return;
-    }
-    self._initialize(http.responseText);
-  };
-  http.send(null);
-};
-
-/** Initialize a connection with the server. */
-Peer.prototype._initialize = function (id) {
-  this.id = id;
-  this.socket.start(this.id, this.options.token);
-};
-
-/** Handles messages from the server. */
-Peer.prototype._handleMessage = function (message) {
-  var type = message.type;
-  var payload = message.payload;
-  var peer = message.src;
-  var connection;
-
-  switch (type) {
-    case 'OPEN':
-      // The connection to the server is open.
-      this.emit('open', this.id);
-      this.open = true;
-      break;
-    case 'ERROR':
-      // Server error.
-      this._abort('server-error', payload.msg);
-      break;
-    case 'ID-TAKEN':
-      // The selected ID is taken.
-      this._abort('unavailable-id', 'ID `' + this.id + '` is taken');
-      break;
-    case 'INVALID-KEY':
-      // The given API key cannot be found.
-      this._abort('invalid-key', 'API KEY "' + this.options.key + '" is invalid');
-      break;
-
-    //
-    case 'LEAVE':
-      // Another peer has closed its connection to this peer.
-      util.log('Received leave message from', peer);
-      this._cleanupPeer(peer);
-      break;
-
-    case 'EXPIRE':
-      // The offer sent to a peer has expired without response.
-      this.emitError('peer-unavailable', 'Could not connect to peer ' + peer);
-      break;
-    case 'OFFER':
-      // we should consider switching this to CALL/CONNECT, but this is the least breaking option.
-      var connectionId = payload.connectionId;
-      connection = this.getConnection(peer, connectionId);
-
-      if (connection) {
-        util.warn('Offer received for existing Connection ID:', connectionId);
-        //connection.handleMessage(message);
-      } else {
-        // Create a new connection.
-        if (payload.type === 'media') {
-          connection = new MediaConnection(peer, this, {
-            connectionId: connectionId,
-            _payload: payload,
-            metadata: payload.metadata
-          });
-          this._addConnection(peer, connection);
-          this.emit('call', connection);
-        } else if (payload.type === 'data') {
-          connection = new DataConnection(peer, this, {
-            connectionId: connectionId,
-            _payload: payload,
-            metadata: payload.metadata,
-            label: payload.label,
-            serialization: payload.serialization,
-            reliable: payload.reliable
-          });
-          this._addConnection(peer, connection);
-          this.emit('connection', connection);
-        } else {
-          util.warn('Received malformed connection type:', payload.type);
-          return;
-        }
-        // Find messages.
-        var messages = this._getMessages(connectionId);
-        for (var i = 0, ii = messages.length; i < ii; i += 1) {
-          connection.handleMessage(messages[i]);
-        }
-      }
-      break;
-    default:
-      if (!payload) {
-        util.warn('You received a malformed message from ' + peer + ' of type ' + type);
-        return;
-      }
-
-      var id = payload.connectionId;
-      connection = this.getConnection(peer, id);
-
-      if (connection && connection.pc) {
-        // Pass it on.
-        connection.handleMessage(message);
-      } else if (id) {
-        // Store for possible later use
-        this._storeMessage(id, message);
-      } else {
-        util.warn('You received an unrecognized message:', message);
-      }
-      break;
-  }
-};
-
-/** Stores messages without a set up connection, to be claimed later. */
-Peer.prototype._storeMessage = function (connectionId, message) {
-  if (!this._lostMessages[connectionId]) {
-    this._lostMessages[connectionId] = [];
-  }
-  this._lostMessages[connectionId].push(message);
-};
-
-/** Retrieve messages from lost message store */
-Peer.prototype._getMessages = function (connectionId) {
-  var messages = this._lostMessages[connectionId];
-  if (messages) {
-    delete this._lostMessages[connectionId];
-    return messages;
-  } else {
-    return [];
-  }
-};
-
-/**
- * Returns a DataConnection to the specified peer. See documentation for a
- * complete list of options.
- */
-Peer.prototype.connect = function (peer, options) {
-  if (this.disconnected) {
-    util.warn('You cannot connect to a new Peer because you called ' + '.disconnect() on this Peer and ended your connection with the ' + 'server. You can create a new Peer to reconnect, or call reconnect ' + 'on this peer if you believe its ID to still be available.');
-    this.emitError('disconnected', 'Cannot connect to new Peer after disconnecting from server.');
-    return;
-  }
-  var connection = new DataConnection(peer, this, options);
-  this._addConnection(peer, connection);
-  return connection;
-};
-
-/**
- * Returns a MediaConnection to the specified peer. See documentation for a
- * complete list of options.
- */
-Peer.prototype.call = function (peer, stream, options) {
-  if (this.disconnected) {
-    util.warn('You cannot connect to a new Peer because you called ' + '.disconnect() on this Peer and ended your connection with the ' + 'server. You can create a new Peer to reconnect.');
-    this.emitError('disconnected', 'Cannot connect to new Peer after disconnecting from server.');
-    return;
-  }
-  if (!stream) {
-    util.error('To call a peer, you must provide a stream from your browser\'s `getUserMedia`.');
-    return;
-  }
-  options = options || {};
-  options._stream = stream;
-  var call = new MediaConnection(peer, this, options);
-  this._addConnection(peer, call);
-  return call;
-};
-
-/** Add a data/media connection to this peer. */
-Peer.prototype._addConnection = function (peer, connection) {
-  if (!this.connections[peer]) {
-    this.connections[peer] = [];
-  }
-  this.connections[peer].push(connection);
-};
-
-/** Retrieve a data/media connection for this peer. */
-Peer.prototype.getConnection = function (peer, id) {
-  var connections = this.connections[peer];
-  if (!connections) {
-    return null;
-  }
-  for (var i = 0, ii = connections.length; i < ii; i++) {
-    if (connections[i].id === id) {
-      return connections[i];
-    }
-  }
-  return null;
-};
-
-Peer.prototype._delayedAbort = function (type, message) {
-  var self = this;
-  util.setZeroTimeout(function () {
-    self._abort(type, message);
-  });
-};
-
-/**
- * Destroys the Peer and emits an error message.
- * The Peer is not destroyed if it's in a disconnected state, in which case
- * it retains its disconnected state and its existing connections.
- */
-Peer.prototype._abort = function (type, message) {
-  util.error('Aborting!');
-  if (!this._lastServerId) {
-    this.destroy();
-  } else {
-    this.disconnect();
-  }
-  this.emitError(type, message);
-};
-
-/** Emits a typed error message. */
-Peer.prototype.emitError = function (type, err) {
-  util.error('Error:', err);
-  if (typeof err === 'string') {
-    err = new Error(err);
-  }
-  err.type = type;
-  this.emit('error', err);
-};
-
-/**
- * Destroys the Peer: closes all active connections as well as the connection
- *  to the server.
- * Warning: The peer can no longer create or accept connections after being
- *  destroyed.
- */
-Peer.prototype.destroy = function () {
-  if (!this.destroyed) {
-    this._cleanup();
-    this.disconnect();
-    this.destroyed = true;
-  }
-};
-
-/** Disconnects every connection on this peer. */
-Peer.prototype._cleanup = function () {
-  if (this.connections) {
-    var peers = Object.keys(this.connections);
-    for (var i = 0, ii = peers.length; i < ii; i++) {
-      this._cleanupPeer(peers[i]);
-    }
-  }
-  this.emit('close');
-};
-
-/** Closes all connections to this peer. */
-Peer.prototype._cleanupPeer = function (peer) {
-  var connections = this.connections[peer];
-  for (var j = 0, jj = connections.length; j < jj; j += 1) {
-    connections[j].close();
-  }
-};
-
-/**
- * Disconnects the Peer's connection to the PeerServer. Does not close any
- *  active connections.
- * Warning: The peer can no longer create or accept connections after being
- *  disconnected. It also cannot reconnect to the server.
- */
-Peer.prototype.disconnect = function () {
-  var self = this;
-  util.setZeroTimeout(function () {
-    if (!self.disconnected) {
-      self.disconnected = true;
-      self.open = false;
-      if (self.socket) {
-        self.socket.close();
-      }
-      self.emit('disconnected', self.id);
-      self._lastServerId = self.id;
-      self.id = null;
-    }
-  });
-};
-
-/** Attempts to reconnect with the same ID. */
-Peer.prototype.reconnect = function () {
-  if (this.disconnected && !this.destroyed) {
-    util.log('Attempting reconnection to server with ID ' + this._lastServerId);
-    this.disconnected = false;
-    this._initializeServerConnection();
-    this._initialize(this._lastServerId);
-  } else if (this.destroyed) {
-    throw new Error('This peer cannot reconnect to the server. It has already been destroyed.');
-  } else if (!this.disconnected && !this.open) {
-    // Do nothing. We're still connecting the first time.
-    util.error('In a hurry? We\'re still trying to make the initial connection!');
-  } else {
-    throw new Error('Peer ' + this.id + ' cannot reconnect because it is not disconnected from the server!');
-  }
-};
-
-/**
- * Get a list of available peer IDs. If you're running your own server, you'll
- * want to set allow_discovery: true in the PeerServer options. If you're using
- * the cloud server, email team@peerjs.com to get the functionality enabled for
- * your key.
- */
-Peer.prototype.listAllPeers = function (cb) {
-  cb = cb || function () {};
-  var self = this;
-  var http = new XMLHttpRequest();
-  var protocol = this.options.secure ? 'https://' : 'http://';
-  var url = protocol + this.options.host + ':' + this.options.port + this.options.path + this.options.key + '/peers';
-  var queryString = '?ts=' + new Date().getTime() + '' + Math.random();
-  url += queryString;
-
-  // If there's no ID we need to wait for one before trying to init socket.
-  http.open('get', url, true);
-  http.onerror = function (e) {
-    self._abort('server-error', 'Could not get peers from the server.');
-    cb([]);
-  };
-  http.onreadystatechange = function () {
-    if (http.readyState !== 4) {
-      return;
-    }
-    if (http.status === 401) {
-      var helpfulError = '';
-      if (self.options.host !== util.CLOUD_HOST) {
-        helpfulError = 'It looks like you\'re using the cloud server. You can email ' + 'team@peerjs.com to enable peer listing for your API key.';
-      } else {
-        helpfulError = 'You need to enable `allow_discovery` on your self-hosted ' + 'PeerServer to use this feature.';
-      }
-      cb([]);
-      throw new Error('It doesn\'t look like you have permission to list peers IDs. ' + helpfulError);
-    } else if (http.status !== 200) {
-      cb([]);
-    } else {
-      cb(JSON.parse(http.responseText));
-    }
-  };
-  http.send(null);
-};
-
-module.exports = Peer;
-
-/***/ }),
-/* 8 */
-/***/ (function(module, exports, __webpack_require__) {
-
-var util = __webpack_require__(0);
-var EventEmitter = __webpack_require__(2);
-
-/**
- * An abstraction on top of WebSockets and XHR streaming to provide fastest
- * possible connection for peers.
- */
-function Socket(secure, host, port, path, key) {
-  if (!(this instanceof Socket)) return new Socket(secure, host, port, path, key);
-
-  EventEmitter.call(this);
-
-  // Disconnected manually.
-  this.disconnected = false;
-  this._queue = [];
-
-  var httpProtocol = secure ? 'https://' : 'http://';
-  var wsProtocol = secure ? 'wss://' : 'ws://';
-  this._httpUrl = httpProtocol + host + ':' + port + path + key;
-  this._wsUrl = wsProtocol + host + ':' + port + path + 'peerjs?key=' + key;
-}
-
-util.inherits(Socket, EventEmitter);
-
-/** Check in with ID or get one from server. */
-Socket.prototype.start = function (id, token) {
-  this.id = id;
-
-  this._httpUrl += '/' + id + '/' + token;
-  this._wsUrl += '&id=' + id + '&token=' + token;
-
-  this._startXhrStream();
-  this._startWebSocket();
-};
-
-/** Start up websocket communications. */
-Socket.prototype._startWebSocket = function (id) {
-  var self = this;
-
-  if (this._socket) {
-    return;
-  }
-
-  this._socket = new WebSocket(this._wsUrl);
-
-  this._socket.onmessage = function (event) {
-    try {
-      var data = JSON.parse(event.data);
-    } catch (e) {
-      util.log('Invalid server message', event.data);
-      return;
-    }
-    self.emit('message', data);
-  };
-
-  this._socket.onclose = function (event) {
-    util.log('Socket closed.');
-    self.disconnected = true;
-    self.emit('disconnected');
-  };
-
-  // Take care of the queue of connections if necessary and make sure Peer knows
-  // socket is open.
-  this._socket.onopen = function () {
-    if (self._timeout) {
-      clearTimeout(self._timeout);
-      setTimeout(function () {
-        self._http.abort();
-        self._http = null;
-      }, 5000);
-    }
-    self._sendQueuedMessages();
-    util.log('Socket open');
-  };
-};
-
-/** Start XHR streaming. */
-Socket.prototype._startXhrStream = function (n) {
-  try {
-    var self = this;
-    this._http = new XMLHttpRequest();
-    this._http._index = 1;
-    this._http._streamIndex = n || 0;
-    this._http.open('post', this._httpUrl + '/id?i=' + this._http._streamIndex, true);
-    this._http.onerror = function () {
-      // If we get an error, likely something went wrong.
-      // Stop streaming.
-      clearTimeout(self._timeout);
-      self.emit('disconnected');
-    };
-    this._http.onreadystatechange = function () {
-      if (this.readyState == 2 && this.old) {
-        this.old.abort();
-        delete this.old;
-      } else if (this.readyState > 2 && this.status === 200 && this.responseText) {
-        self._handleStream(this);
-      }
-    };
-    this._http.send(null);
-    this._setHTTPTimeout();
-  } catch (e) {
-    util.log('XMLHttpRequest not available; defaulting to WebSockets');
-  }
-};
-
-/** Handles onreadystatechange response as a stream. */
-Socket.prototype._handleStream = function (http) {
-  // 3 and 4 are loading/done state. All others are not relevant.
-  var messages = http.responseText.split('\n');
-
-  // Check to see if anything needs to be processed on buffer.
-  if (http._buffer) {
-    while (http._buffer.length > 0) {
-      var index = http._buffer.shift();
-      var bufferedMessage = messages[index];
-      try {
-        bufferedMessage = JSON.parse(bufferedMessage);
-      } catch (e) {
-        http._buffer.shift(index);
-        break;
-      }
-      this.emit('message', bufferedMessage);
-    }
-  }
-
-  var message = messages[http._index];
-  if (message) {
-    http._index += 1;
-    // Buffering--this message is incomplete and we'll get to it next time.
-    // This checks if the httpResponse ended in a `\n`, in which case the last
-    // element of messages should be the empty string.
-    if (http._index === messages.length) {
-      if (!http._buffer) {
-        http._buffer = [];
-      }
-      http._buffer.push(http._index - 1);
-    } else {
-      try {
-        message = JSON.parse(message);
-      } catch (e) {
-        util.log('Invalid server message', message);
-        return;
-      }
-      this.emit('message', message);
-    }
-  }
-};
-
-Socket.prototype._setHTTPTimeout = function () {
-  var self = this;
-  this._timeout = setTimeout(function () {
-    var old = self._http;
-    if (!self._wsOpen()) {
-      self._startXhrStream(old._streamIndex + 1);
-      self._http.old = old;
-    } else {
-      old.abort();
-    }
-  }, 25000);
-};
-
-/** Is the websocket currently open? */
-Socket.prototype._wsOpen = function () {
-  return this._socket && this._socket.readyState == 1;
-};
-
-/** Send queued messages. */
-Socket.prototype._sendQueuedMessages = function () {
-  for (var i = 0, ii = this._queue.length; i < ii; i += 1) {
-    this.send(this._queue[i]);
-  }
-};
-
-/** Exposed send for DC & Peer. */
-Socket.prototype.send = function (data) {
-  if (this.disconnected) {
-    return;
-  }
-
-  // If we didn't get an ID yet, we can't yet send anything so we should queue
-  // up these messages.
-  if (!this.id) {
-    this._queue.push(data);
-    return;
-  }
-
-  if (!data.type) {
-    this.emit('error', 'Invalid message');
-    return;
-  }
-
-  var message = JSON.stringify(data);
-  if (this._wsOpen()) {
-    this._socket.send(message);
-  } else {
-    var http = new XMLHttpRequest();
-    var url = this._httpUrl + '/' + data.type.toLowerCase();
-    http.open('post', url, true);
-    http.setRequestHeader('Content-Type', 'application/json');
-    http.send(message);
-  }
-};
-
-Socket.prototype.close = function () {
-  if (!this.disconnected && this._wsOpen()) {
-    this._socket.close();
-    this.disconnected = true;
-  }
-};
-
-module.exports = Socket;
-
-/***/ }),
-/* 9 */
-/***/ (function(module, exports, __webpack_require__) {
-
-var util = __webpack_require__(0);
-var EventEmitter = __webpack_require__(2);
-var Negotiator = __webpack_require__(5);
-
-/**
- * Wraps the streaming interface between two Peers.
- */
-function MediaConnection(peer, provider, options) {
-  if (!(this instanceof MediaConnection)) return new MediaConnection(peer, provider, options);
-  EventEmitter.call(this);
-
-  this.options = util.extend({}, options);
-
-  this.open = false;
-  this.type = 'media';
-  this.peer = peer;
-  this.provider = provider;
-  this.metadata = this.options.metadata;
-  this.localStream = this.options._stream;
-
-  this.id = this.options.connectionId || MediaConnection._idPrefix + util.randomToken();
-  if (this.localStream) {
-    Negotiator.startConnection(this, { _stream: this.localStream, originator: true });
-  }
-};
-
-util.inherits(MediaConnection, EventEmitter);
-
-MediaConnection._idPrefix = 'mc_';
-
-MediaConnection.prototype.addStream = function (remoteStream) {
-  util.log('Receiving stream', remoteStream);
-
-  this.remoteStream = remoteStream;
-  this.emit('stream', remoteStream); // Should we call this `open`?
-};
-
-MediaConnection.prototype.handleMessage = function (message) {
-  var payload = message.payload;
-
-  switch (message.type) {
-    case 'ANSWER':
-      // Forward to negotiator
-      Negotiator.handleSDP(message.type, this, payload.sdp);
-      this.open = true;
-      break;
-    case 'CANDIDATE':
-      Negotiator.handleCandidate(this, payload.candidate);
-      break;
-    default:
-      util.warn('Unrecognized message type:', message.type, 'from peer:', this.peer);
-      break;
-  }
-};
-
-MediaConnection.prototype.answer = function (stream) {
-  if (this.localStream) {
-    util.warn('Local stream already exists on this MediaConnection. Are you answering a call twice?');
-    return;
-  }
-
-  this.options._payload._stream = stream;
-
-  this.localStream = stream;
-  Negotiator.startConnection(this, this.options._payload);
-  // Retrieve lost messages stored because PeerConnection not set up.
-  var messages = this.provider._getMessages(this.id);
-  for (var i = 0, ii = messages.length; i < ii; i += 1) {
-    this.handleMessage(messages[i]);
-  }
-  this.open = true;
-};
-
-/**
- * Exposed functionality for users.
- */
-
-/** Allows user to close connection. */
-MediaConnection.prototype.close = function () {
-  if (!this.open) {
-    return;
-  }
-  this.open = false;
-  Negotiator.cleanup(this);
-  this.emit('close');
-};
-
-module.exports = MediaConnection;
-
-/***/ }),
-/* 10 */
-/***/ (function(module, exports, __webpack_require__) {
-
-var util = __webpack_require__(0);
-var EventEmitter = __webpack_require__(2);
-var Negotiator = __webpack_require__(5);
-var Reliable = __webpack_require__(11);
-
-/**
- * Wraps a DataChannel between two Peers.
- */
-function DataConnection(peer, provider, options) {
-  if (!(this instanceof DataConnection)) return new DataConnection(peer, provider, options);
-  EventEmitter.call(this);
-
-  this.options = util.extend({
-    serialization: 'binary',
-    reliable: false
-  }, options);
-
-  // Connection is not open yet.
-  this.open = false;
-  this.type = 'data';
-  this.peer = peer;
-  this.provider = provider;
-
-  this.id = this.options.connectionId || DataConnection._idPrefix + util.randomToken();
-
-  this.label = this.options.label || this.id;
-  this.metadata = this.options.metadata;
-  this.serialization = this.options.serialization;
-  this.reliable = this.options.reliable;
-
-  // Data channel buffering.
-  this._buffer = [];
-  this._buffering = false;
-  this.bufferSize = 0;
-
-  // For storing large data.
-  this._chunkedData = {};
-
-  if (this.options._payload) {
-    this._peerBrowser = this.options._payload.browser;
-  }
-
-  Negotiator.startConnection(this, this.options._payload || {
-    originator: true
-  });
-}
-
-util.inherits(DataConnection, EventEmitter);
-
-DataConnection._idPrefix = 'dc_';
-
-/** Called by the Negotiator when the DataChannel is ready. */
-DataConnection.prototype.initialize = function (dc) {
-  this._dc = this.dataChannel = dc;
-  this._configureDataChannel();
-};
-
-DataConnection.prototype._configureDataChannel = function () {
-  var self = this;
-  if (util.supports.sctp) {
-    this._dc.binaryType = 'arraybuffer';
-  }
-  this._dc.onopen = function () {
-    util.log('Data channel connection success');
-    self.open = true;
-    self.emit('open');
-  };
-
-  // Use the Reliable shim for non Firefox browsers
-  if (!util.supports.sctp && this.reliable) {
-    this._reliable = new Reliable(this._dc, util.debug);
-  }
-
-  if (this._reliable) {
-    this._reliable.onmessage = function (msg) {
-      self.emit('data', msg);
-    };
-  } else {
-    this._dc.onmessage = function (e) {
-      self._handleDataMessage(e);
-    };
-  }
-  this._dc.onclose = function (e) {
-    util.log('DataChannel closed for:', self.peer);
-    self.close();
-  };
-};
-
-// Handles a DataChannel message.
-DataConnection.prototype._handleDataMessage = function (e) {
-  var self = this;
-  var data = e.data;
-  var datatype = data.constructor;
-  if (this.serialization === 'binary' || this.serialization === 'binary-utf8') {
-    if (datatype === Blob) {
-      // Datatype should never be blob
-      util.blobToArrayBuffer(data, function (ab) {
-        data = util.unpack(ab);
-        self.emit('data', data);
-      });
-      return;
-    } else if (datatype === ArrayBuffer) {
-      data = util.unpack(data);
-    } else if (datatype === String) {
-      // String fallback for binary data for browsers that don't support binary yet
-      var ab = util.binaryStringToArrayBuffer(data);
-      data = util.unpack(ab);
-    }
-  } else if (this.serialization === 'json') {
-    data = JSON.parse(data);
-  }
-
-  // Check if we've chunked--if so, piece things back together.
-  // We're guaranteed that this isn't 0.
-  if (data.__peerData) {
-    var id = data.__peerData;
-    var chunkInfo = this._chunkedData[id] || { data: [], count: 0, total: data.total };
-
-    chunkInfo.data[data.n] = data.data;
-    chunkInfo.count += 1;
-
-    if (chunkInfo.total === chunkInfo.count) {
-      // Clean up before making the recursive call to `_handleDataMessage`.
-      delete this._chunkedData[id];
-
-      // We've received all the chunks--time to construct the complete data.
-      data = new Blob(chunkInfo.data);
-      this._handleDataMessage({ data: data });
-    }
-
-    this._chunkedData[id] = chunkInfo;
-    return;
-  }
-
-  this.emit('data', data);
-};
-
-/**
- * Exposed functionality for users.
- */
-
-/** Allows user to close connection. */
-DataConnection.prototype.close = function () {
-  if (!this.open) {
-    return;
-  }
-  this.open = false;
-  Negotiator.cleanup(this);
-  this.emit('close');
-};
-
-/** Allows user to send data. */
-DataConnection.prototype.send = function (data, chunked) {
-  if (!this.open) {
-    this.emit('error', new Error('Connection is not open. You should listen for the `open` event before sending messages.'));
-    return;
-  }
-  if (this._reliable) {
-    // Note: reliable shim sending will make it so that you cannot customize
-    // serialization.
-    this._reliable.send(data);
-    return;
-  }
-  var self = this;
-  if (this.serialization === 'json') {
-    this._bufferedSend(JSON.stringify(data));
-  } else if (this.serialization === 'binary' || this.serialization === 'binary-utf8') {
-    var blob = util.pack(data);
-
-    // For Chrome-Firefox interoperability, we need to make Firefox "chunk"
-    // the data it sends out.
-    var needsChunking = util.chunkedBrowsers[this._peerBrowser] || util.chunkedBrowsers[util.browser];
-    if (needsChunking && !chunked && blob.size > util.chunkedMTU) {
-      this._sendChunks(blob);
-      return;
-    }
-
-    // DataChannel currently only supports strings.
-    if (!util.supports.sctp) {
-      util.blobToBinaryString(blob, function (str) {
-        self._bufferedSend(str);
-      });
-    } else if (!util.supports.binaryBlob) {
-      // We only do this if we really need to (e.g. blobs are not supported),
-      // because this conversion is costly.
-      util.blobToArrayBuffer(blob, function (ab) {
-        self._bufferedSend(ab);
-      });
-    } else {
-      this._bufferedSend(blob);
-    }
-  } else {
-    this._bufferedSend(data);
-  }
-};
-
-DataConnection.prototype._bufferedSend = function (msg) {
-  if (this._buffering || !this._trySend(msg)) {
-    this._buffer.push(msg);
-    this.bufferSize = this._buffer.length;
-  }
-};
-
-// Returns true if the send succeeds.
-DataConnection.prototype._trySend = function (msg) {
-  try {
-    this._dc.send(msg);
-  } catch (e) {
-    this._buffering = true;
-
-    var self = this;
-    setTimeout(function () {
-      // Try again.
-      self._buffering = false;
-      self._tryBuffer();
-    }, 100);
-    return false;
-  }
-  return true;
-};
-
-// Try to send the first message in the buffer.
-DataConnection.prototype._tryBuffer = function () {
-  if (this._buffer.length === 0) {
-    return;
-  }
-
-  var msg = this._buffer[0];
-
-  if (this._trySend(msg)) {
-    this._buffer.shift();
-    this.bufferSize = this._buffer.length;
-    this._tryBuffer();
-  }
-};
-
-DataConnection.prototype._sendChunks = function (blob) {
-  var blobs = util.chunk(blob);
-  for (var i = 0, ii = blobs.length; i < ii; i += 1) {
-    var blob = blobs[i];
-    this.send(blob, true);
-  }
-};
-
-DataConnection.prototype.handleMessage = function (message) {
-  var payload = message.payload;
-
-  switch (message.type) {
-    case 'ANSWER':
-      this._peerBrowser = payload.browser;
-
-      // Forward to negotiator
-      Negotiator.handleSDP(message.type, this, payload.sdp);
-      break;
-    case 'CANDIDATE':
-      Negotiator.handleCandidate(this, payload.candidate);
-      break;
-    default:
-      util.warn('Unrecognized message type:', message.type, 'from peer:', this.peer);
-      break;
-  }
-};
-
-module.exports = DataConnection;
-
-/***/ }),
-/* 11 */
-/***/ (function(module, exports, __webpack_require__) {
-
-var util = __webpack_require__(12);
-
-/**
- * Reliable transfer for Chrome Canary DataChannel impl.
- * Author: @michellebu
- */
-function Reliable(dc, debug) {
-  if (!(this instanceof Reliable)) return new Reliable(dc);
-  this._dc = dc;
-
-  util.debug = debug;
-
-  // Messages sent/received so far.
-  // id: { ack: n, chunks: [...] }
-  this._outgoing = {};
-  // id: { ack: ['ack', id, n], chunks: [...] }
-  this._incoming = {};
-  this._received = {};
-
-  // Window size.
-  this._window = 1000;
-  // MTU.
-  this._mtu = 500;
-  // Interval for setInterval. In ms.
-  this._interval = 0;
-
-  // Messages sent.
-  this._count = 0;
-
-  // Outgoing message queue.
-  this._queue = [];
-
-  this._setupDC();
-};
-
-// Send a message reliably.
-Reliable.prototype.send = function (msg) {
-  // Determine if chunking is necessary.
-  var bl = util.pack(msg);
-  if (bl.size < this._mtu) {
-    this._handleSend(['no', bl]);
-    return;
-  }
-
-  this._outgoing[this._count] = {
-    ack: 0,
-    chunks: this._chunk(bl)
-  };
-
-  if (util.debug) {
-    this._outgoing[this._count].timer = new Date();
-  }
-
-  // Send prelim window.
-  this._sendWindowedChunks(this._count);
-  this._count += 1;
-};
-
-// Set up interval for processing queue.
-Reliable.prototype._setupInterval = function () {
-  // TODO: fail gracefully.
-
-  var self = this;
-  this._timeout = setInterval(function () {
-    // FIXME: String stuff makes things terribly async.
-    var msg = self._queue.shift();
-    if (msg._multiple) {
-      for (var i = 0, ii = msg.length; i < ii; i += 1) {
-        self._intervalSend(msg[i]);
-      }
-    } else {
-      self._intervalSend(msg);
-    }
-  }, this._interval);
-};
-
-Reliable.prototype._intervalSend = function (msg) {
-  var self = this;
-  msg = util.pack(msg);
-  util.blobToBinaryString(msg, function (str) {
-    self._dc.send(str);
-  });
-  if (self._queue.length === 0) {
-    clearTimeout(self._timeout);
-    self._timeout = null;
-    //self._processAcks();
-  }
-};
-
-// Go through ACKs to send missing pieces.
-Reliable.prototype._processAcks = function () {
-  for (var id in this._outgoing) {
-    if (this._outgoing.hasOwnProperty(id)) {
-      this._sendWindowedChunks(id);
-    }
-  }
-};
-
-// Handle sending a message.
-// FIXME: Don't wait for interval time for all messages...
-Reliable.prototype._handleSend = function (msg) {
-  var push = true;
-  for (var i = 0, ii = this._queue.length; i < ii; i += 1) {
-    var item = this._queue[i];
-    if (item === msg) {
-      push = false;
-    } else if (item._multiple && item.indexOf(msg) !== -1) {
-      push = false;
-    }
-  }
-  if (push) {
-    this._queue.push(msg);
-    if (!this._timeout) {
-      this._setupInterval();
-    }
-  }
-};
-
-// Set up DataChannel handlers.
-Reliable.prototype._setupDC = function () {
-  // Handle various message types.
-  var self = this;
-  this._dc.onmessage = function (e) {
-    var msg = e.data;
-    var datatype = msg.constructor;
-    // FIXME: msg is String until binary is supported.
-    // Once that happens, this will have to be smarter.
-    if (datatype === String) {
-      var ab = util.binaryStringToArrayBuffer(msg);
-      msg = util.unpack(ab);
-      self._handleMessage(msg);
-    }
-  };
-};
-
-// Handles an incoming message.
-Reliable.prototype._handleMessage = function (msg) {
-  var id = msg[1];
-  var idata = this._incoming[id];
-  var odata = this._outgoing[id];
-  var data;
-  switch (msg[0]) {
-    // No chunking was done.
-    case 'no':
-      var message = id;
-      if (!!message) {
-        this.onmessage(util.unpack(message));
-      }
-      break;
-    // Reached the end of the message.
-    case 'end':
-      data = idata;
-
-      // In case end comes first.
-      this._received[id] = msg[2];
-
-      if (!data) {
-        break;
-      }
-
-      this._ack(id);
-      break;
-    case 'ack':
-      data = odata;
-      if (!!data) {
-        var ack = msg[2];
-        // Take the larger ACK, for out of order messages.
-        data.ack = Math.max(ack, data.ack);
-
-        // Clean up when all chunks are ACKed.
-        if (data.ack >= data.chunks.length) {
-          util.log('Time: ', new Date() - data.timer);
-          delete this._outgoing[id];
-        } else {
-          this._processAcks();
-        }
-      }
-      // If !data, just ignore.
-      break;
-    // Received a chunk of data.
-    case 'chunk':
-      // Create a new entry if none exists.
-      data = idata;
-      if (!data) {
-        var end = this._received[id];
-        if (end === true) {
-          break;
-        }
-        data = {
-          ack: ['ack', id, 0],
-          chunks: []
-        };
-        this._incoming[id] = data;
-      }
-
-      var n = msg[2];
-      var chunk = msg[3];
-      data.chunks[n] = new Uint8Array(chunk);
-
-      // If we get the chunk we're looking for, ACK for next missing.
-      // Otherwise, ACK the same N again.
-      if (n === data.ack[2]) {
-        this._calculateNextAck(id);
-      }
-      this._ack(id);
-      break;
-    default:
-      // Shouldn't happen, but would make sense for message to just go
-      // through as is.
-      this._handleSend(msg);
-      break;
-  }
-};
-
-// Chunks BL into smaller messages.
-Reliable.prototype._chunk = function (bl) {
-  var chunks = [];
-  var size = bl.size;
-  var start = 0;
-  while (start < size) {
-    var end = Math.min(size, start + this._mtu);
-    var b = bl.slice(start, end);
-    var chunk = {
-      payload: b
-    };
-    chunks.push(chunk);
-    start = end;
-  }
-  util.log('Created', chunks.length, 'chunks.');
-  return chunks;
-};
-
-// Sends ACK N, expecting Nth blob chunk for message ID.
-Reliable.prototype._ack = function (id) {
-  var ack = this._incoming[id].ack;
-
-  // if ack is the end value, then call _complete.
-  if (this._received[id] === ack[2]) {
-    this._complete(id);
-    this._received[id] = true;
-  }
-
-  this._handleSend(ack);
-};
-
-// Calculates the next ACK number, given chunks.
-Reliable.prototype._calculateNextAck = function (id) {
-  var data = this._incoming[id];
-  var chunks = data.chunks;
-  for (var i = 0, ii = chunks.length; i < ii; i += 1) {
-    // This chunk is missing!!! Better ACK for it.
-    if (chunks[i] === undefined) {
-      data.ack[2] = i;
-      return;
-    }
-  }
-  data.ack[2] = chunks.length;
-};
-
-// Sends the next window of chunks.
-Reliable.prototype._sendWindowedChunks = function (id) {
-  util.log('sendWindowedChunks for: ', id);
-  var data = this._outgoing[id];
-  var ch = data.chunks;
-  var chunks = [];
-  var limit = Math.min(data.ack + this._window, ch.length);
-  for (var i = data.ack; i < limit; i += 1) {
-    if (!ch[i].sent || i === data.ack) {
-      ch[i].sent = true;
-      chunks.push(['chunk', id, i, ch[i].payload]);
-    }
-  }
-  if (data.ack + this._window >= ch.length) {
-    chunks.push(['end', id, ch.length]);
-  }
-  chunks._multiple = true;
-  this._handleSend(chunks);
-};
-
-// Puts together a message from chunks.
-Reliable.prototype._complete = function (id) {
-  util.log('Completed called for', id);
-  var self = this;
-  var chunks = this._incoming[id].chunks;
-  var bl = new Blob(chunks);
-  util.blobToArrayBuffer(bl, function (ab) {
-    self.onmessage(util.unpack(ab));
-  });
-  delete this._incoming[id];
-};
-
-// Ups bandwidth limit on SDP. Meant to be called during offer/answer.
-Reliable.higherBandwidthSDP = function (sdp) {
-  // AS stands for Application-Specific Maximum.
-  // Bandwidth number is in kilobits / sec.
-  // See RFC for more info: http://www.ietf.org/rfc/rfc2327.txt
-
-  // Chrome 31+ doesn't want us munging the SDP, so we'll let them have their
-  // way.
-  var version = navigator.appVersion.match(/Chrome\/(.*?) /);
-  if (version) {
-    version = parseInt(version[1].split('.').shift());
-    if (version < 31) {
-      var parts = sdp.split('b=AS:30');
-      var replace = 'b=AS:102400'; // 100 Mbps
-      if (parts.length > 1) {
-        return parts[0] + replace + parts[1];
-      }
-    }
-  }
-
-  return sdp;
-};
-
-// Overwritten, typically.
-Reliable.prototype.onmessage = function (msg) {};
-
-module.exports.Reliable = Reliable;
-
-/***/ }),
-/* 12 */
-/***/ (function(module, exports, __webpack_require__) {
-
-var BinaryPack = __webpack_require__(3);
-
-var util = {
-  debug: false,
-
-  inherits: function (ctor, superCtor) {
-    ctor.super_ = superCtor;
-    ctor.prototype = Object.create(superCtor.prototype, {
-      constructor: {
-        value: ctor,
-        enumerable: false,
-        writable: true,
-        configurable: true
-      }
-    });
-  },
-  extend: function (dest, source) {
-    for (var key in source) {
-      if (source.hasOwnProperty(key)) {
-        dest[key] = source[key];
-      }
-    }
-    return dest;
-  },
-  pack: BinaryPack.pack,
-  unpack: BinaryPack.unpack,
-
-  log: function () {
-    if (util.debug) {
-      var copy = [];
-      for (var i = 0; i < arguments.length; i++) {
-        copy[i] = arguments[i];
-      }
-      copy.unshift('Reliable: ');
-      console.log.apply(console, copy);
-    }
-  },
-
-  setZeroTimeout: function (global) {
-    var timeouts = [];
-    var messageName = 'zero-timeout-message';
-
-    // Like setTimeout, but only takes a function argument.	 There's
-    // no time argument (always zero) and no arguments (you have to
-    // use a closure).
-    function setZeroTimeoutPostMessage(fn) {
-      timeouts.push(fn);
-      global.postMessage(messageName, '*');
-    }
-
-    function handleMessage(event) {
-      if (event.source == global && event.data == messageName) {
-        if (event.stopPropagation) {
-          event.stopPropagation();
-        }
-        if (timeouts.length) {
-          timeouts.shift()();
-        }
-      }
-    }
-    if (global.addEventListener) {
-      global.addEventListener('message', handleMessage, true);
-    } else if (global.attachEvent) {
-      global.attachEvent('onmessage', handleMessage);
-    }
-    return setZeroTimeoutPostMessage;
-  }(this),
-
-  blobToArrayBuffer: function (blob, cb) {
-    var fr = new FileReader();
-    fr.onload = function (evt) {
-      cb(evt.target.result);
-    };
-    fr.readAsArrayBuffer(blob);
-  },
-  blobToBinaryString: function (blob, cb) {
-    var fr = new FileReader();
-    fr.onload = function (evt) {
-      cb(evt.target.result);
-    };
-    fr.readAsBinaryString(blob);
-  },
-  binaryStringToArrayBuffer: function (binary) {
-    var byteArray = new Uint8Array(binary.length);
-    for (var i = 0; i < binary.length; i++) {
-      byteArray[i] = binary.charCodeAt(i) & 0xff;
-    }
-    return byteArray.buffer;
-  },
-  randomToken: function () {
-    return Math.random().toString(36).substr(2);
-  }
-};
-
-module.exports = util;
-
-/***/ }),
-/* 13 */
-/***/ (function(module, exports) {
-
-/**
- * Export `uid`
- */
-
-module.exports = uid;
-
-/**
- * Create a `uid`
- *
- * @param {String} len
- * @return {String} uid
- */
-
-function uid(len) {
-  len = len || 7;
-  return Math.random().toString(35).substr(2, len);
-}
-
-/***/ }),
-/* 14 */
 /***/ (function(module, exports, __webpack_require__) {
 
 var __WEBPACK_AMD_DEFINE_ARRAY__, __WEBPACK_AMD_DEFINE_RESULT__;/*!
@@ -12914,28 +11341,1759 @@ var __WEBPACK_AMD_DEFINE_ARRAY__, __WEBPACK_AMD_DEFINE_RESULT__;/*!
 });
 
 /***/ }),
-/* 15 */
-/***/ (function(module, exports) {
+/* 7 */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
 
+"use strict";
+Object.defineProperty(__webpack_exports__, "__esModule", { value: true });
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0_peerjs__ = __webpack_require__(8);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0_peerjs___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_0_peerjs__);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1_jquery__ = __webpack_require__(6);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1_jquery___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_1_jquery__);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_2__modules__ = __webpack_require__(14);
+// core
+
+
+
+// import modules
+
+
+// list of the peers
+let connectedPeers = {};
+const myId = Object(__WEBPACK_IMPORTED_MODULE_2__modules__["d" /* getPeerId */])();
+
+// create new peer object
+const config = { host: 'peerjs-.herokuapp.com', port: 443, secure: true, key: 'peerjs' };
+const peer = new __WEBPACK_IMPORTED_MODULE_0_peerjs___default.a(myId, config);
+
+// listen connection
+peer.on('connection', conn => {
+    // update status text
+    __WEBPACK_IMPORTED_MODULE_1_jquery___default()('#connectStatus').removeClass().addClass('text-info').html(conn.peer + ' connected with me.');
+    // show chat box
+    __WEBPACK_IMPORTED_MODULE_1_jquery___default()('#chat').show();
+
+    // activate open cam button, disable connect button
+    Object(__WEBPACK_IMPORTED_MODULE_2__modules__["a" /* activeCamButtons */])();
+    __WEBPACK_IMPORTED_MODULE_1_jquery___default()('#btnConnect').attr('disabled', 'disabled');
+
+    console.log(conn.peer + ' bana bağlandı.');
+
+    // add list the connect
+    connectedPeers[conn.peer] = conn;
+
+    // listen open status of connecting
+    conn.on('open', () => {
+        conn.send({ label: 'peers', peers: Object.keys(connectedPeers) });
+    });
+
+    // listen data
+    Object(__WEBPACK_IMPORTED_MODULE_2__modules__["e" /* listenData */])(conn, peer, connectedPeers);
+});
+
+// listen open status of the peer object
+peer.on('open', id => {
+    console.log('My peer id is', id);
+});
+
+// listen connect button
+__WEBPACK_IMPORTED_MODULE_1_jquery___default()('#btnConnect').click(() => {
+    // get id from input
+    const friendId = __WEBPACK_IMPORTED_MODULE_1_jquery___default()('#txtFriendId').val();
+
+    // activate open cam buttons, disable connect button
+    Object(__WEBPACK_IMPORTED_MODULE_2__modules__["a" /* activeCamButtons */])();
+    __WEBPACK_IMPORTED_MODULE_1_jquery___default()('#btnConnect').attr('disabled', 'disabled');
+
+    // connect to friend via id
+    connectedPeers[friendId] = peer.connect(friendId);
+
+    // listen the peer
+    connectedPeers = Object(__WEBPACK_IMPORTED_MODULE_2__modules__["e" /* listenData */])(connectedPeers[friendId], peer, connectedPeers);
+    console.log(connectedPeers);
+
+    // if connected
+    if (connectedPeers[friendId].peer !== '') {
+        // update status text
+        __WEBPACK_IMPORTED_MODULE_1_jquery___default()('#connectStatus').removeClass().addClass('text-success').html('Connected with ' + friendId);
+        // show chat box
+        __WEBPACK_IMPORTED_MODULE_1_jquery___default()('#chat').show();
+    }
+});
+
+// listen message input
+__WEBPACK_IMPORTED_MODULE_1_jquery___default()("#message").on("keyup", e => {
+    // listen press enter
+    if (e.which === 13) {
+        const message = __WEBPACK_IMPORTED_MODULE_1_jquery___default()("#message").val();
+        if (message !== "") {
+            // send message to all peers
+            for (var connectedPeer in connectedPeers) {
+                const c = connectedPeers[connectedPeer];
+                c.send({ label: 'message', message: message, id: myId });
+            }
+            __WEBPACK_IMPORTED_MODULE_1_jquery___default()("#chat ul").append(Object(__WEBPACK_IMPORTED_MODULE_2__modules__["b" /* createText */])({ message: message, id: 'Ben' }));
+            __WEBPACK_IMPORTED_MODULE_1_jquery___default()('#message').val('');
+        }
+    }
+});
+
+// listen open cam button
+__WEBPACK_IMPORTED_MODULE_1_jquery___default()('.btnCam').click(() => {
+    // show cams
+    __WEBPACK_IMPORTED_MODULE_1_jquery___default()('#cams').show();
+    // disable cam button
+    __WEBPACK_IMPORTED_MODULE_1_jquery___default()('.btnCam').attr('disabled', 'disabled');
+    // create video element for local stream
+    Object(__WEBPACK_IMPORTED_MODULE_2__modules__["c" /* createVideo */])('localStream');
+    // open local stream
+    Object(__WEBPACK_IMPORTED_MODULE_2__modules__["f" /* openStream */])(stream => {
+        Object(__WEBPACK_IMPORTED_MODULE_2__modules__["g" /* playVideo */])(stream, 'localStream');
+        // send local stream to the others
+        for (let p in connectedPeers) {
+            const call = peer.call(connectedPeers[p].peer, stream);
+            call.on('answer', answer => console.log(answer));
+        }
+    });
+});
+
+// listen open cam request
+__WEBPACK_IMPORTED_MODULE_1_jquery___default()('#btnCamRequest').click(() => {
+    const friendId = __WEBPACK_IMPORTED_MODULE_1_jquery___default()('#txtFriendIdForRequest').val();
+    connectedPeers[friendId].send({ label: 'camRequest', id: myId });
+});
+
+// listen call of peer object
+peer.on('call', call => {
+    // show cams
+    __WEBPACK_IMPORTED_MODULE_1_jquery___default()('#cams').show();
+    // create video element for remote stream
+    Object(__WEBPACK_IMPORTED_MODULE_2__modules__["c" /* createVideo */])(call.peer);
+    Object(__WEBPACK_IMPORTED_MODULE_2__modules__["f" /* openStream */])(stream => {
+        // send answer to the call
+        call.answer(stream);
+    });
+    // listen stream of the call
+    call.on('stream', remoteStream => {
+        Object(__WEBPACK_IMPORTED_MODULE_2__modules__["g" /* playVideo */])(remoteStream, call.peer);
+    });
+});
+
+/***/ }),
+/* 8 */
+/***/ (function(module, exports, __webpack_require__) {
+
+var util = __webpack_require__(0);
+var EventEmitter = __webpack_require__(2);
+var Socket = __webpack_require__(9);
+var MediaConnection = __webpack_require__(10);
+var DataConnection = __webpack_require__(11);
+
+/**
+ * A peer who can initiate connections with other peers.
+ */
+function Peer(id, options) {
+  if (!(this instanceof Peer)) return new Peer(id, options);
+  EventEmitter.call(this);
+
+  // Deal with overloading
+  if (id && id.constructor == Object) {
+    options = id;
+    id = undefined;
+  } else if (id) {
+    // Ensure id is a string
+    id = id.toString();
+  }
+  //
+
+  // Configurize options
+  options = util.extend({
+    debug: 0, // 1: Errors, 2: Warnings, 3: All logs
+    host: util.CLOUD_HOST,
+    port: util.CLOUD_PORT,
+    key: 'peerjs',
+    path: '/',
+    token: util.randomToken(),
+    config: util.defaultConfig
+  }, options);
+  this.options = options;
+  // Detect relative URL host.
+  if (options.host === '/') {
+    options.host = window.location.hostname;
+  }
+  // Set path correctly.
+  if (options.path[0] !== '/') {
+    options.path = '/' + options.path;
+  }
+  if (options.path[options.path.length - 1] !== '/') {
+    options.path += '/';
+  }
+
+  // Set whether we use SSL to same as current host
+  if (options.secure === undefined && options.host !== util.CLOUD_HOST) {
+    options.secure = util.isSecure();
+  }
+  // Set a custom log function if present
+  if (options.logFunction) {
+    util.setLogFunction(options.logFunction);
+  }
+  util.setLogLevel(options.debug);
+  //
+
+  // Sanity checks
+  // Ensure WebRTC supported
+  if (!util.supports.audioVideo && !util.supports.data) {
+    this._delayedAbort('browser-incompatible', 'The current browser does not support WebRTC');
+    return;
+  }
+  // Ensure alphanumeric id
+  if (!util.validateId(id)) {
+    this._delayedAbort('invalid-id', 'ID "' + id + '" is invalid');
+    return;
+  }
+  // Ensure valid key
+  if (!util.validateKey(options.key)) {
+    this._delayedAbort('invalid-key', 'API KEY "' + options.key + '" is invalid');
+    return;
+  }
+  // Ensure not using unsecure cloud server on SSL page
+  if (options.secure && options.host === '0.peerjs.com') {
+    this._delayedAbort('ssl-unavailable', 'The cloud server currently does not support HTTPS. Please run your own PeerServer to use HTTPS.');
+    return;
+  }
+  //
+
+  // States.
+  this.destroyed = false; // Connections have been killed
+  this.disconnected = false; // Connection to PeerServer killed but P2P connections still active
+  this.open = false; // Sockets and such are not yet open.
+  //
+
+  // References
+  this.connections = {}; // DataConnections for this peer.
+  this._lostMessages = {}; // src => [list of messages]
+  //
+
+  // Start the server connection
+  this._initializeServerConnection();
+  if (id) {
+    this._initialize(id);
+  } else {
+    this._retrieveId();
+  }
+  //
+}
+
+util.inherits(Peer, EventEmitter);
+
+// Initialize the 'socket' (which is actually a mix of XHR streaming and
+// websockets.)
+Peer.prototype._initializeServerConnection = function () {
+  var self = this;
+  this.socket = new Socket(this.options.secure, this.options.host, this.options.port, this.options.path, this.options.key);
+  this.socket.on('message', function (data) {
+    self._handleMessage(data);
+  });
+  this.socket.on('error', function (error) {
+    self._abort('socket-error', error);
+  });
+  this.socket.on('disconnected', function () {
+    // If we haven't explicitly disconnected, emit error and disconnect.
+    if (!self.disconnected) {
+      self.emitError('network', 'Lost connection to server.');
+      self.disconnect();
+    }
+  });
+  this.socket.on('close', function () {
+    // If we haven't explicitly disconnected, emit error.
+    if (!self.disconnected) {
+      self._abort('socket-closed', 'Underlying socket is already closed.');
+    }
+  });
+};
+
+/** Get a unique ID from the server via XHR. */
+Peer.prototype._retrieveId = function (cb) {
+  var self = this;
+  var http = new XMLHttpRequest();
+  var protocol = this.options.secure ? 'https://' : 'http://';
+  var url = protocol + this.options.host + ':' + this.options.port + this.options.path + this.options.key + '/id';
+  var queryString = '?ts=' + new Date().getTime() + '' + Math.random();
+  url += queryString;
+
+  // If there's no ID we need to wait for one before trying to init socket.
+  http.open('get', url, true);
+  http.onerror = function (e) {
+    util.error('Error retrieving ID', e);
+    var pathError = '';
+    if (self.options.path === '/' && self.options.host !== util.CLOUD_HOST) {
+      pathError = ' If you passed in a `path` to your self-hosted PeerServer, ' + 'you\'ll also need to pass in that same path when creating a new ' + 'Peer.';
+    }
+    self._abort('server-error', 'Could not get an ID from the server.' + pathError);
+  };
+  http.onreadystatechange = function () {
+    if (http.readyState !== 4) {
+      return;
+    }
+    if (http.status !== 200) {
+      http.onerror();
+      return;
+    }
+    self._initialize(http.responseText);
+  };
+  http.send(null);
+};
+
+/** Initialize a connection with the server. */
+Peer.prototype._initialize = function (id) {
+  this.id = id;
+  this.socket.start(this.id, this.options.token);
+};
+
+/** Handles messages from the server. */
+Peer.prototype._handleMessage = function (message) {
+  var type = message.type;
+  var payload = message.payload;
+  var peer = message.src;
+  var connection;
+
+  switch (type) {
+    case 'OPEN':
+      // The connection to the server is open.
+      this.emit('open', this.id);
+      this.open = true;
+      break;
+    case 'ERROR':
+      // Server error.
+      this._abort('server-error', payload.msg);
+      break;
+    case 'ID-TAKEN':
+      // The selected ID is taken.
+      this._abort('unavailable-id', 'ID `' + this.id + '` is taken');
+      break;
+    case 'INVALID-KEY':
+      // The given API key cannot be found.
+      this._abort('invalid-key', 'API KEY "' + this.options.key + '" is invalid');
+      break;
+
+    //
+    case 'LEAVE':
+      // Another peer has closed its connection to this peer.
+      util.log('Received leave message from', peer);
+      this._cleanupPeer(peer);
+      break;
+
+    case 'EXPIRE':
+      // The offer sent to a peer has expired without response.
+      this.emitError('peer-unavailable', 'Could not connect to peer ' + peer);
+      break;
+    case 'OFFER':
+      // we should consider switching this to CALL/CONNECT, but this is the least breaking option.
+      var connectionId = payload.connectionId;
+      connection = this.getConnection(peer, connectionId);
+
+      if (connection) {
+        util.warn('Offer received for existing Connection ID:', connectionId);
+        //connection.handleMessage(message);
+      } else {
+        // Create a new connection.
+        if (payload.type === 'media') {
+          connection = new MediaConnection(peer, this, {
+            connectionId: connectionId,
+            _payload: payload,
+            metadata: payload.metadata
+          });
+          this._addConnection(peer, connection);
+          this.emit('call', connection);
+        } else if (payload.type === 'data') {
+          connection = new DataConnection(peer, this, {
+            connectionId: connectionId,
+            _payload: payload,
+            metadata: payload.metadata,
+            label: payload.label,
+            serialization: payload.serialization,
+            reliable: payload.reliable
+          });
+          this._addConnection(peer, connection);
+          this.emit('connection', connection);
+        } else {
+          util.warn('Received malformed connection type:', payload.type);
+          return;
+        }
+        // Find messages.
+        var messages = this._getMessages(connectionId);
+        for (var i = 0, ii = messages.length; i < ii; i += 1) {
+          connection.handleMessage(messages[i]);
+        }
+      }
+      break;
+    default:
+      if (!payload) {
+        util.warn('You received a malformed message from ' + peer + ' of type ' + type);
+        return;
+      }
+
+      var id = payload.connectionId;
+      connection = this.getConnection(peer, id);
+
+      if (connection && connection.pc) {
+        // Pass it on.
+        connection.handleMessage(message);
+      } else if (id) {
+        // Store for possible later use
+        this._storeMessage(id, message);
+      } else {
+        util.warn('You received an unrecognized message:', message);
+      }
+      break;
+  }
+};
+
+/** Stores messages without a set up connection, to be claimed later. */
+Peer.prototype._storeMessage = function (connectionId, message) {
+  if (!this._lostMessages[connectionId]) {
+    this._lostMessages[connectionId] = [];
+  }
+  this._lostMessages[connectionId].push(message);
+};
+
+/** Retrieve messages from lost message store */
+Peer.prototype._getMessages = function (connectionId) {
+  var messages = this._lostMessages[connectionId];
+  if (messages) {
+    delete this._lostMessages[connectionId];
+    return messages;
+  } else {
+    return [];
+  }
+};
+
+/**
+ * Returns a DataConnection to the specified peer. See documentation for a
+ * complete list of options.
+ */
+Peer.prototype.connect = function (peer, options) {
+  if (this.disconnected) {
+    util.warn('You cannot connect to a new Peer because you called ' + '.disconnect() on this Peer and ended your connection with the ' + 'server. You can create a new Peer to reconnect, or call reconnect ' + 'on this peer if you believe its ID to still be available.');
+    this.emitError('disconnected', 'Cannot connect to new Peer after disconnecting from server.');
+    return;
+  }
+  var connection = new DataConnection(peer, this, options);
+  this._addConnection(peer, connection);
+  return connection;
+};
+
+/**
+ * Returns a MediaConnection to the specified peer. See documentation for a
+ * complete list of options.
+ */
+Peer.prototype.call = function (peer, stream, options) {
+  if (this.disconnected) {
+    util.warn('You cannot connect to a new Peer because you called ' + '.disconnect() on this Peer and ended your connection with the ' + 'server. You can create a new Peer to reconnect.');
+    this.emitError('disconnected', 'Cannot connect to new Peer after disconnecting from server.');
+    return;
+  }
+  if (!stream) {
+    util.error('To call a peer, you must provide a stream from your browser\'s `getUserMedia`.');
+    return;
+  }
+  options = options || {};
+  options._stream = stream;
+  var call = new MediaConnection(peer, this, options);
+  this._addConnection(peer, call);
+  return call;
+};
+
+/** Add a data/media connection to this peer. */
+Peer.prototype._addConnection = function (peer, connection) {
+  if (!this.connections[peer]) {
+    this.connections[peer] = [];
+  }
+  this.connections[peer].push(connection);
+};
+
+/** Retrieve a data/media connection for this peer. */
+Peer.prototype.getConnection = function (peer, id) {
+  var connections = this.connections[peer];
+  if (!connections) {
+    return null;
+  }
+  for (var i = 0, ii = connections.length; i < ii; i++) {
+    if (connections[i].id === id) {
+      return connections[i];
+    }
+  }
+  return null;
+};
+
+Peer.prototype._delayedAbort = function (type, message) {
+  var self = this;
+  util.setZeroTimeout(function () {
+    self._abort(type, message);
+  });
+};
+
+/**
+ * Destroys the Peer and emits an error message.
+ * The Peer is not destroyed if it's in a disconnected state, in which case
+ * it retains its disconnected state and its existing connections.
+ */
+Peer.prototype._abort = function (type, message) {
+  util.error('Aborting!');
+  if (!this._lastServerId) {
+    this.destroy();
+  } else {
+    this.disconnect();
+  }
+  this.emitError(type, message);
+};
+
+/** Emits a typed error message. */
+Peer.prototype.emitError = function (type, err) {
+  util.error('Error:', err);
+  if (typeof err === 'string') {
+    err = new Error(err);
+  }
+  err.type = type;
+  this.emit('error', err);
+};
+
+/**
+ * Destroys the Peer: closes all active connections as well as the connection
+ *  to the server.
+ * Warning: The peer can no longer create or accept connections after being
+ *  destroyed.
+ */
+Peer.prototype.destroy = function () {
+  if (!this.destroyed) {
+    this._cleanup();
+    this.disconnect();
+    this.destroyed = true;
+  }
+};
+
+/** Disconnects every connection on this peer. */
+Peer.prototype._cleanup = function () {
+  if (this.connections) {
+    var peers = Object.keys(this.connections);
+    for (var i = 0, ii = peers.length; i < ii; i++) {
+      this._cleanupPeer(peers[i]);
+    }
+  }
+  this.emit('close');
+};
+
+/** Closes all connections to this peer. */
+Peer.prototype._cleanupPeer = function (peer) {
+  var connections = this.connections[peer];
+  for (var j = 0, jj = connections.length; j < jj; j += 1) {
+    connections[j].close();
+  }
+};
+
+/**
+ * Disconnects the Peer's connection to the PeerServer. Does not close any
+ *  active connections.
+ * Warning: The peer can no longer create or accept connections after being
+ *  disconnected. It also cannot reconnect to the server.
+ */
+Peer.prototype.disconnect = function () {
+  var self = this;
+  util.setZeroTimeout(function () {
+    if (!self.disconnected) {
+      self.disconnected = true;
+      self.open = false;
+      if (self.socket) {
+        self.socket.close();
+      }
+      self.emit('disconnected', self.id);
+      self._lastServerId = self.id;
+      self.id = null;
+    }
+  });
+};
+
+/** Attempts to reconnect with the same ID. */
+Peer.prototype.reconnect = function () {
+  if (this.disconnected && !this.destroyed) {
+    util.log('Attempting reconnection to server with ID ' + this._lastServerId);
+    this.disconnected = false;
+    this._initializeServerConnection();
+    this._initialize(this._lastServerId);
+  } else if (this.destroyed) {
+    throw new Error('This peer cannot reconnect to the server. It has already been destroyed.');
+  } else if (!this.disconnected && !this.open) {
+    // Do nothing. We're still connecting the first time.
+    util.error('In a hurry? We\'re still trying to make the initial connection!');
+  } else {
+    throw new Error('Peer ' + this.id + ' cannot reconnect because it is not disconnected from the server!');
+  }
+};
+
+/**
+ * Get a list of available peer IDs. If you're running your own server, you'll
+ * want to set allow_discovery: true in the PeerServer options. If you're using
+ * the cloud server, email team@peerjs.com to get the functionality enabled for
+ * your key.
+ */
+Peer.prototype.listAllPeers = function (cb) {
+  cb = cb || function () {};
+  var self = this;
+  var http = new XMLHttpRequest();
+  var protocol = this.options.secure ? 'https://' : 'http://';
+  var url = protocol + this.options.host + ':' + this.options.port + this.options.path + this.options.key + '/peers';
+  var queryString = '?ts=' + new Date().getTime() + '' + Math.random();
+  url += queryString;
+
+  // If there's no ID we need to wait for one before trying to init socket.
+  http.open('get', url, true);
+  http.onerror = function (e) {
+    self._abort('server-error', 'Could not get peers from the server.');
+    cb([]);
+  };
+  http.onreadystatechange = function () {
+    if (http.readyState !== 4) {
+      return;
+    }
+    if (http.status === 401) {
+      var helpfulError = '';
+      if (self.options.host !== util.CLOUD_HOST) {
+        helpfulError = 'It looks like you\'re using the cloud server. You can email ' + 'team@peerjs.com to enable peer listing for your API key.';
+      } else {
+        helpfulError = 'You need to enable `allow_discovery` on your self-hosted ' + 'PeerServer to use this feature.';
+      }
+      cb([]);
+      throw new Error('It doesn\'t look like you have permission to list peers IDs. ' + helpfulError);
+    } else if (http.status !== 200) {
+      cb([]);
+    } else {
+      cb(JSON.parse(http.responseText));
+    }
+  };
+  http.send(null);
+};
+
+module.exports = Peer;
+
+/***/ }),
+/* 9 */
+/***/ (function(module, exports, __webpack_require__) {
+
+var util = __webpack_require__(0);
+var EventEmitter = __webpack_require__(2);
+
+/**
+ * An abstraction on top of WebSockets and XHR streaming to provide fastest
+ * possible connection for peers.
+ */
+function Socket(secure, host, port, path, key) {
+  if (!(this instanceof Socket)) return new Socket(secure, host, port, path, key);
+
+  EventEmitter.call(this);
+
+  // Disconnected manually.
+  this.disconnected = false;
+  this._queue = [];
+
+  var httpProtocol = secure ? 'https://' : 'http://';
+  var wsProtocol = secure ? 'wss://' : 'ws://';
+  this._httpUrl = httpProtocol + host + ':' + port + path + key;
+  this._wsUrl = wsProtocol + host + ':' + port + path + 'peerjs?key=' + key;
+}
+
+util.inherits(Socket, EventEmitter);
+
+/** Check in with ID or get one from server. */
+Socket.prototype.start = function (id, token) {
+  this.id = id;
+
+  this._httpUrl += '/' + id + '/' + token;
+  this._wsUrl += '&id=' + id + '&token=' + token;
+
+  this._startXhrStream();
+  this._startWebSocket();
+};
+
+/** Start up websocket communications. */
+Socket.prototype._startWebSocket = function (id) {
+  var self = this;
+
+  if (this._socket) {
+    return;
+  }
+
+  this._socket = new WebSocket(this._wsUrl);
+
+  this._socket.onmessage = function (event) {
+    try {
+      var data = JSON.parse(event.data);
+    } catch (e) {
+      util.log('Invalid server message', event.data);
+      return;
+    }
+    self.emit('message', data);
+  };
+
+  this._socket.onclose = function (event) {
+    util.log('Socket closed.');
+    self.disconnected = true;
+    self.emit('disconnected');
+  };
+
+  // Take care of the queue of connections if necessary and make sure Peer knows
+  // socket is open.
+  this._socket.onopen = function () {
+    if (self._timeout) {
+      clearTimeout(self._timeout);
+      setTimeout(function () {
+        self._http.abort();
+        self._http = null;
+      }, 5000);
+    }
+    self._sendQueuedMessages();
+    util.log('Socket open');
+  };
+};
+
+/** Start XHR streaming. */
+Socket.prototype._startXhrStream = function (n) {
+  try {
+    var self = this;
+    this._http = new XMLHttpRequest();
+    this._http._index = 1;
+    this._http._streamIndex = n || 0;
+    this._http.open('post', this._httpUrl + '/id?i=' + this._http._streamIndex, true);
+    this._http.onerror = function () {
+      // If we get an error, likely something went wrong.
+      // Stop streaming.
+      clearTimeout(self._timeout);
+      self.emit('disconnected');
+    };
+    this._http.onreadystatechange = function () {
+      if (this.readyState == 2 && this.old) {
+        this.old.abort();
+        delete this.old;
+      } else if (this.readyState > 2 && this.status === 200 && this.responseText) {
+        self._handleStream(this);
+      }
+    };
+    this._http.send(null);
+    this._setHTTPTimeout();
+  } catch (e) {
+    util.log('XMLHttpRequest not available; defaulting to WebSockets');
+  }
+};
+
+/** Handles onreadystatechange response as a stream. */
+Socket.prototype._handleStream = function (http) {
+  // 3 and 4 are loading/done state. All others are not relevant.
+  var messages = http.responseText.split('\n');
+
+  // Check to see if anything needs to be processed on buffer.
+  if (http._buffer) {
+    while (http._buffer.length > 0) {
+      var index = http._buffer.shift();
+      var bufferedMessage = messages[index];
+      try {
+        bufferedMessage = JSON.parse(bufferedMessage);
+      } catch (e) {
+        http._buffer.shift(index);
+        break;
+      }
+      this.emit('message', bufferedMessage);
+    }
+  }
+
+  var message = messages[http._index];
+  if (message) {
+    http._index += 1;
+    // Buffering--this message is incomplete and we'll get to it next time.
+    // This checks if the httpResponse ended in a `\n`, in which case the last
+    // element of messages should be the empty string.
+    if (http._index === messages.length) {
+      if (!http._buffer) {
+        http._buffer = [];
+      }
+      http._buffer.push(http._index - 1);
+    } else {
+      try {
+        message = JSON.parse(message);
+      } catch (e) {
+        util.log('Invalid server message', message);
+        return;
+      }
+      this.emit('message', message);
+    }
+  }
+};
+
+Socket.prototype._setHTTPTimeout = function () {
+  var self = this;
+  this._timeout = setTimeout(function () {
+    var old = self._http;
+    if (!self._wsOpen()) {
+      self._startXhrStream(old._streamIndex + 1);
+      self._http.old = old;
+    } else {
+      old.abort();
+    }
+  }, 25000);
+};
+
+/** Is the websocket currently open? */
+Socket.prototype._wsOpen = function () {
+  return this._socket && this._socket.readyState == 1;
+};
+
+/** Send queued messages. */
+Socket.prototype._sendQueuedMessages = function () {
+  for (var i = 0, ii = this._queue.length; i < ii; i += 1) {
+    this.send(this._queue[i]);
+  }
+};
+
+/** Exposed send for DC & Peer. */
+Socket.prototype.send = function (data) {
+  if (this.disconnected) {
+    return;
+  }
+
+  // If we didn't get an ID yet, we can't yet send anything so we should queue
+  // up these messages.
+  if (!this.id) {
+    this._queue.push(data);
+    return;
+  }
+
+  if (!data.type) {
+    this.emit('error', 'Invalid message');
+    return;
+  }
+
+  var message = JSON.stringify(data);
+  if (this._wsOpen()) {
+    this._socket.send(message);
+  } else {
+    var http = new XMLHttpRequest();
+    var url = this._httpUrl + '/' + data.type.toLowerCase();
+    http.open('post', url, true);
+    http.setRequestHeader('Content-Type', 'application/json');
+    http.send(message);
+  }
+};
+
+Socket.prototype.close = function () {
+  if (!this.disconnected && this._wsOpen()) {
+    this._socket.close();
+    this.disconnected = true;
+  }
+};
+
+module.exports = Socket;
+
+/***/ }),
+/* 10 */
+/***/ (function(module, exports, __webpack_require__) {
+
+var util = __webpack_require__(0);
+var EventEmitter = __webpack_require__(2);
+var Negotiator = __webpack_require__(5);
+
+/**
+ * Wraps the streaming interface between two Peers.
+ */
+function MediaConnection(peer, provider, options) {
+  if (!(this instanceof MediaConnection)) return new MediaConnection(peer, provider, options);
+  EventEmitter.call(this);
+
+  this.options = util.extend({}, options);
+
+  this.open = false;
+  this.type = 'media';
+  this.peer = peer;
+  this.provider = provider;
+  this.metadata = this.options.metadata;
+  this.localStream = this.options._stream;
+
+  this.id = this.options.connectionId || MediaConnection._idPrefix + util.randomToken();
+  if (this.localStream) {
+    Negotiator.startConnection(this, { _stream: this.localStream, originator: true });
+  }
+};
+
+util.inherits(MediaConnection, EventEmitter);
+
+MediaConnection._idPrefix = 'mc_';
+
+MediaConnection.prototype.addStream = function (remoteStream) {
+  util.log('Receiving stream', remoteStream);
+
+  this.remoteStream = remoteStream;
+  this.emit('stream', remoteStream); // Should we call this `open`?
+};
+
+MediaConnection.prototype.handleMessage = function (message) {
+  var payload = message.payload;
+
+  switch (message.type) {
+    case 'ANSWER':
+      // Forward to negotiator
+      Negotiator.handleSDP(message.type, this, payload.sdp);
+      this.open = true;
+      break;
+    case 'CANDIDATE':
+      Negotiator.handleCandidate(this, payload.candidate);
+      break;
+    default:
+      util.warn('Unrecognized message type:', message.type, 'from peer:', this.peer);
+      break;
+  }
+};
+
+MediaConnection.prototype.answer = function (stream) {
+  if (this.localStream) {
+    util.warn('Local stream already exists on this MediaConnection. Are you answering a call twice?');
+    return;
+  }
+
+  this.options._payload._stream = stream;
+
+  this.localStream = stream;
+  Negotiator.startConnection(this, this.options._payload);
+  // Retrieve lost messages stored because PeerConnection not set up.
+  var messages = this.provider._getMessages(this.id);
+  for (var i = 0, ii = messages.length; i < ii; i += 1) {
+    this.handleMessage(messages[i]);
+  }
+  this.open = true;
+};
+
+/**
+ * Exposed functionality for users.
+ */
+
+/** Allows user to close connection. */
+MediaConnection.prototype.close = function () {
+  if (!this.open) {
+    return;
+  }
+  this.open = false;
+  Negotiator.cleanup(this);
+  this.emit('close');
+};
+
+module.exports = MediaConnection;
+
+/***/ }),
+/* 11 */
+/***/ (function(module, exports, __webpack_require__) {
+
+var util = __webpack_require__(0);
+var EventEmitter = __webpack_require__(2);
+var Negotiator = __webpack_require__(5);
+var Reliable = __webpack_require__(12);
+
+/**
+ * Wraps a DataChannel between two Peers.
+ */
+function DataConnection(peer, provider, options) {
+  if (!(this instanceof DataConnection)) return new DataConnection(peer, provider, options);
+  EventEmitter.call(this);
+
+  this.options = util.extend({
+    serialization: 'binary',
+    reliable: false
+  }, options);
+
+  // Connection is not open yet.
+  this.open = false;
+  this.type = 'data';
+  this.peer = peer;
+  this.provider = provider;
+
+  this.id = this.options.connectionId || DataConnection._idPrefix + util.randomToken();
+
+  this.label = this.options.label || this.id;
+  this.metadata = this.options.metadata;
+  this.serialization = this.options.serialization;
+  this.reliable = this.options.reliable;
+
+  // Data channel buffering.
+  this._buffer = [];
+  this._buffering = false;
+  this.bufferSize = 0;
+
+  // For storing large data.
+  this._chunkedData = {};
+
+  if (this.options._payload) {
+    this._peerBrowser = this.options._payload.browser;
+  }
+
+  Negotiator.startConnection(this, this.options._payload || {
+    originator: true
+  });
+}
+
+util.inherits(DataConnection, EventEmitter);
+
+DataConnection._idPrefix = 'dc_';
+
+/** Called by the Negotiator when the DataChannel is ready. */
+DataConnection.prototype.initialize = function (dc) {
+  this._dc = this.dataChannel = dc;
+  this._configureDataChannel();
+};
+
+DataConnection.prototype._configureDataChannel = function () {
+  var self = this;
+  if (util.supports.sctp) {
+    this._dc.binaryType = 'arraybuffer';
+  }
+  this._dc.onopen = function () {
+    util.log('Data channel connection success');
+    self.open = true;
+    self.emit('open');
+  };
+
+  // Use the Reliable shim for non Firefox browsers
+  if (!util.supports.sctp && this.reliable) {
+    this._reliable = new Reliable(this._dc, util.debug);
+  }
+
+  if (this._reliable) {
+    this._reliable.onmessage = function (msg) {
+      self.emit('data', msg);
+    };
+  } else {
+    this._dc.onmessage = function (e) {
+      self._handleDataMessage(e);
+    };
+  }
+  this._dc.onclose = function (e) {
+    util.log('DataChannel closed for:', self.peer);
+    self.close();
+  };
+};
+
+// Handles a DataChannel message.
+DataConnection.prototype._handleDataMessage = function (e) {
+  var self = this;
+  var data = e.data;
+  var datatype = data.constructor;
+  if (this.serialization === 'binary' || this.serialization === 'binary-utf8') {
+    if (datatype === Blob) {
+      // Datatype should never be blob
+      util.blobToArrayBuffer(data, function (ab) {
+        data = util.unpack(ab);
+        self.emit('data', data);
+      });
+      return;
+    } else if (datatype === ArrayBuffer) {
+      data = util.unpack(data);
+    } else if (datatype === String) {
+      // String fallback for binary data for browsers that don't support binary yet
+      var ab = util.binaryStringToArrayBuffer(data);
+      data = util.unpack(ab);
+    }
+  } else if (this.serialization === 'json') {
+    data = JSON.parse(data);
+  }
+
+  // Check if we've chunked--if so, piece things back together.
+  // We're guaranteed that this isn't 0.
+  if (data.__peerData) {
+    var id = data.__peerData;
+    var chunkInfo = this._chunkedData[id] || { data: [], count: 0, total: data.total };
+
+    chunkInfo.data[data.n] = data.data;
+    chunkInfo.count += 1;
+
+    if (chunkInfo.total === chunkInfo.count) {
+      // Clean up before making the recursive call to `_handleDataMessage`.
+      delete this._chunkedData[id];
+
+      // We've received all the chunks--time to construct the complete data.
+      data = new Blob(chunkInfo.data);
+      this._handleDataMessage({ data: data });
+    }
+
+    this._chunkedData[id] = chunkInfo;
+    return;
+  }
+
+  this.emit('data', data);
+};
+
+/**
+ * Exposed functionality for users.
+ */
+
+/** Allows user to close connection. */
+DataConnection.prototype.close = function () {
+  if (!this.open) {
+    return;
+  }
+  this.open = false;
+  Negotiator.cleanup(this);
+  this.emit('close');
+};
+
+/** Allows user to send data. */
+DataConnection.prototype.send = function (data, chunked) {
+  if (!this.open) {
+    this.emit('error', new Error('Connection is not open. You should listen for the `open` event before sending messages.'));
+    return;
+  }
+  if (this._reliable) {
+    // Note: reliable shim sending will make it so that you cannot customize
+    // serialization.
+    this._reliable.send(data);
+    return;
+  }
+  var self = this;
+  if (this.serialization === 'json') {
+    this._bufferedSend(JSON.stringify(data));
+  } else if (this.serialization === 'binary' || this.serialization === 'binary-utf8') {
+    var blob = util.pack(data);
+
+    // For Chrome-Firefox interoperability, we need to make Firefox "chunk"
+    // the data it sends out.
+    var needsChunking = util.chunkedBrowsers[this._peerBrowser] || util.chunkedBrowsers[util.browser];
+    if (needsChunking && !chunked && blob.size > util.chunkedMTU) {
+      this._sendChunks(blob);
+      return;
+    }
+
+    // DataChannel currently only supports strings.
+    if (!util.supports.sctp) {
+      util.blobToBinaryString(blob, function (str) {
+        self._bufferedSend(str);
+      });
+    } else if (!util.supports.binaryBlob) {
+      // We only do this if we really need to (e.g. blobs are not supported),
+      // because this conversion is costly.
+      util.blobToArrayBuffer(blob, function (ab) {
+        self._bufferedSend(ab);
+      });
+    } else {
+      this._bufferedSend(blob);
+    }
+  } else {
+    this._bufferedSend(data);
+  }
+};
+
+DataConnection.prototype._bufferedSend = function (msg) {
+  if (this._buffering || !this._trySend(msg)) {
+    this._buffer.push(msg);
+    this.bufferSize = this._buffer.length;
+  }
+};
+
+// Returns true if the send succeeds.
+DataConnection.prototype._trySend = function (msg) {
+  try {
+    this._dc.send(msg);
+  } catch (e) {
+    this._buffering = true;
+
+    var self = this;
+    setTimeout(function () {
+      // Try again.
+      self._buffering = false;
+      self._tryBuffer();
+    }, 100);
+    return false;
+  }
+  return true;
+};
+
+// Try to send the first message in the buffer.
+DataConnection.prototype._tryBuffer = function () {
+  if (this._buffer.length === 0) {
+    return;
+  }
+
+  var msg = this._buffer[0];
+
+  if (this._trySend(msg)) {
+    this._buffer.shift();
+    this.bufferSize = this._buffer.length;
+    this._tryBuffer();
+  }
+};
+
+DataConnection.prototype._sendChunks = function (blob) {
+  var blobs = util.chunk(blob);
+  for (var i = 0, ii = blobs.length; i < ii; i += 1) {
+    var blob = blobs[i];
+    this.send(blob, true);
+  }
+};
+
+DataConnection.prototype.handleMessage = function (message) {
+  var payload = message.payload;
+
+  switch (message.type) {
+    case 'ANSWER':
+      this._peerBrowser = payload.browser;
+
+      // Forward to negotiator
+      Negotiator.handleSDP(message.type, this, payload.sdp);
+      break;
+    case 'CANDIDATE':
+      Negotiator.handleCandidate(this, payload.candidate);
+      break;
+    default:
+      util.warn('Unrecognized message type:', message.type, 'from peer:', this.peer);
+      break;
+  }
+};
+
+module.exports = DataConnection;
+
+/***/ }),
+/* 12 */
+/***/ (function(module, exports, __webpack_require__) {
+
+var util = __webpack_require__(13);
+
+/**
+ * Reliable transfer for Chrome Canary DataChannel impl.
+ * Author: @michellebu
+ */
+function Reliable(dc, debug) {
+  if (!(this instanceof Reliable)) return new Reliable(dc);
+  this._dc = dc;
+
+  util.debug = debug;
+
+  // Messages sent/received so far.
+  // id: { ack: n, chunks: [...] }
+  this._outgoing = {};
+  // id: { ack: ['ack', id, n], chunks: [...] }
+  this._incoming = {};
+  this._received = {};
+
+  // Window size.
+  this._window = 1000;
+  // MTU.
+  this._mtu = 500;
+  // Interval for setInterval. In ms.
+  this._interval = 0;
+
+  // Messages sent.
+  this._count = 0;
+
+  // Outgoing message queue.
+  this._queue = [];
+
+  this._setupDC();
+};
+
+// Send a message reliably.
+Reliable.prototype.send = function (msg) {
+  // Determine if chunking is necessary.
+  var bl = util.pack(msg);
+  if (bl.size < this._mtu) {
+    this._handleSend(['no', bl]);
+    return;
+  }
+
+  this._outgoing[this._count] = {
+    ack: 0,
+    chunks: this._chunk(bl)
+  };
+
+  if (util.debug) {
+    this._outgoing[this._count].timer = new Date();
+  }
+
+  // Send prelim window.
+  this._sendWindowedChunks(this._count);
+  this._count += 1;
+};
+
+// Set up interval for processing queue.
+Reliable.prototype._setupInterval = function () {
+  // TODO: fail gracefully.
+
+  var self = this;
+  this._timeout = setInterval(function () {
+    // FIXME: String stuff makes things terribly async.
+    var msg = self._queue.shift();
+    if (msg._multiple) {
+      for (var i = 0, ii = msg.length; i < ii; i += 1) {
+        self._intervalSend(msg[i]);
+      }
+    } else {
+      self._intervalSend(msg);
+    }
+  }, this._interval);
+};
+
+Reliable.prototype._intervalSend = function (msg) {
+  var self = this;
+  msg = util.pack(msg);
+  util.blobToBinaryString(msg, function (str) {
+    self._dc.send(str);
+  });
+  if (self._queue.length === 0) {
+    clearTimeout(self._timeout);
+    self._timeout = null;
+    //self._processAcks();
+  }
+};
+
+// Go through ACKs to send missing pieces.
+Reliable.prototype._processAcks = function () {
+  for (var id in this._outgoing) {
+    if (this._outgoing.hasOwnProperty(id)) {
+      this._sendWindowedChunks(id);
+    }
+  }
+};
+
+// Handle sending a message.
+// FIXME: Don't wait for interval time for all messages...
+Reliable.prototype._handleSend = function (msg) {
+  var push = true;
+  for (var i = 0, ii = this._queue.length; i < ii; i += 1) {
+    var item = this._queue[i];
+    if (item === msg) {
+      push = false;
+    } else if (item._multiple && item.indexOf(msg) !== -1) {
+      push = false;
+    }
+  }
+  if (push) {
+    this._queue.push(msg);
+    if (!this._timeout) {
+      this._setupInterval();
+    }
+  }
+};
+
+// Set up DataChannel handlers.
+Reliable.prototype._setupDC = function () {
+  // Handle various message types.
+  var self = this;
+  this._dc.onmessage = function (e) {
+    var msg = e.data;
+    var datatype = msg.constructor;
+    // FIXME: msg is String until binary is supported.
+    // Once that happens, this will have to be smarter.
+    if (datatype === String) {
+      var ab = util.binaryStringToArrayBuffer(msg);
+      msg = util.unpack(ab);
+      self._handleMessage(msg);
+    }
+  };
+};
+
+// Handles an incoming message.
+Reliable.prototype._handleMessage = function (msg) {
+  var id = msg[1];
+  var idata = this._incoming[id];
+  var odata = this._outgoing[id];
+  var data;
+  switch (msg[0]) {
+    // No chunking was done.
+    case 'no':
+      var message = id;
+      if (!!message) {
+        this.onmessage(util.unpack(message));
+      }
+      break;
+    // Reached the end of the message.
+    case 'end':
+      data = idata;
+
+      // In case end comes first.
+      this._received[id] = msg[2];
+
+      if (!data) {
+        break;
+      }
+
+      this._ack(id);
+      break;
+    case 'ack':
+      data = odata;
+      if (!!data) {
+        var ack = msg[2];
+        // Take the larger ACK, for out of order messages.
+        data.ack = Math.max(ack, data.ack);
+
+        // Clean up when all chunks are ACKed.
+        if (data.ack >= data.chunks.length) {
+          util.log('Time: ', new Date() - data.timer);
+          delete this._outgoing[id];
+        } else {
+          this._processAcks();
+        }
+      }
+      // If !data, just ignore.
+      break;
+    // Received a chunk of data.
+    case 'chunk':
+      // Create a new entry if none exists.
+      data = idata;
+      if (!data) {
+        var end = this._received[id];
+        if (end === true) {
+          break;
+        }
+        data = {
+          ack: ['ack', id, 0],
+          chunks: []
+        };
+        this._incoming[id] = data;
+      }
+
+      var n = msg[2];
+      var chunk = msg[3];
+      data.chunks[n] = new Uint8Array(chunk);
+
+      // If we get the chunk we're looking for, ACK for next missing.
+      // Otherwise, ACK the same N again.
+      if (n === data.ack[2]) {
+        this._calculateNextAck(id);
+      }
+      this._ack(id);
+      break;
+    default:
+      // Shouldn't happen, but would make sense for message to just go
+      // through as is.
+      this._handleSend(msg);
+      break;
+  }
+};
+
+// Chunks BL into smaller messages.
+Reliable.prototype._chunk = function (bl) {
+  var chunks = [];
+  var size = bl.size;
+  var start = 0;
+  while (start < size) {
+    var end = Math.min(size, start + this._mtu);
+    var b = bl.slice(start, end);
+    var chunk = {
+      payload: b
+    };
+    chunks.push(chunk);
+    start = end;
+  }
+  util.log('Created', chunks.length, 'chunks.');
+  return chunks;
+};
+
+// Sends ACK N, expecting Nth blob chunk for message ID.
+Reliable.prototype._ack = function (id) {
+  var ack = this._incoming[id].ack;
+
+  // if ack is the end value, then call _complete.
+  if (this._received[id] === ack[2]) {
+    this._complete(id);
+    this._received[id] = true;
+  }
+
+  this._handleSend(ack);
+};
+
+// Calculates the next ACK number, given chunks.
+Reliable.prototype._calculateNextAck = function (id) {
+  var data = this._incoming[id];
+  var chunks = data.chunks;
+  for (var i = 0, ii = chunks.length; i < ii; i += 1) {
+    // This chunk is missing!!! Better ACK for it.
+    if (chunks[i] === undefined) {
+      data.ack[2] = i;
+      return;
+    }
+  }
+  data.ack[2] = chunks.length;
+};
+
+// Sends the next window of chunks.
+Reliable.prototype._sendWindowedChunks = function (id) {
+  util.log('sendWindowedChunks for: ', id);
+  var data = this._outgoing[id];
+  var ch = data.chunks;
+  var chunks = [];
+  var limit = Math.min(data.ack + this._window, ch.length);
+  for (var i = data.ack; i < limit; i += 1) {
+    if (!ch[i].sent || i === data.ack) {
+      ch[i].sent = true;
+      chunks.push(['chunk', id, i, ch[i].payload]);
+    }
+  }
+  if (data.ack + this._window >= ch.length) {
+    chunks.push(['end', id, ch.length]);
+  }
+  chunks._multiple = true;
+  this._handleSend(chunks);
+};
+
+// Puts together a message from chunks.
+Reliable.prototype._complete = function (id) {
+  util.log('Completed called for', id);
+  var self = this;
+  var chunks = this._incoming[id].chunks;
+  var bl = new Blob(chunks);
+  util.blobToArrayBuffer(bl, function (ab) {
+    self.onmessage(util.unpack(ab));
+  });
+  delete this._incoming[id];
+};
+
+// Ups bandwidth limit on SDP. Meant to be called during offer/answer.
+Reliable.higherBandwidthSDP = function (sdp) {
+  // AS stands for Application-Specific Maximum.
+  // Bandwidth number is in kilobits / sec.
+  // See RFC for more info: http://www.ietf.org/rfc/rfc2327.txt
+
+  // Chrome 31+ doesn't want us munging the SDP, so we'll let them have their
+  // way.
+  var version = navigator.appVersion.match(/Chrome\/(.*?) /);
+  if (version) {
+    version = parseInt(version[1].split('.').shift());
+    if (version < 31) {
+      var parts = sdp.split('b=AS:30');
+      var replace = 'b=AS:102400'; // 100 Mbps
+      if (parts.length > 1) {
+        return parts[0] + replace + parts[1];
+      }
+    }
+  }
+
+  return sdp;
+};
+
+// Overwritten, typically.
+Reliable.prototype.onmessage = function (msg) {};
+
+module.exports.Reliable = Reliable;
+
+/***/ }),
+/* 13 */
+/***/ (function(module, exports, __webpack_require__) {
+
+var BinaryPack = __webpack_require__(3);
+
+var util = {
+  debug: false,
+
+  inherits: function (ctor, superCtor) {
+    ctor.super_ = superCtor;
+    ctor.prototype = Object.create(superCtor.prototype, {
+      constructor: {
+        value: ctor,
+        enumerable: false,
+        writable: true,
+        configurable: true
+      }
+    });
+  },
+  extend: function (dest, source) {
+    for (var key in source) {
+      if (source.hasOwnProperty(key)) {
+        dest[key] = source[key];
+      }
+    }
+    return dest;
+  },
+  pack: BinaryPack.pack,
+  unpack: BinaryPack.unpack,
+
+  log: function () {
+    if (util.debug) {
+      var copy = [];
+      for (var i = 0; i < arguments.length; i++) {
+        copy[i] = arguments[i];
+      }
+      copy.unshift('Reliable: ');
+      console.log.apply(console, copy);
+    }
+  },
+
+  setZeroTimeout: function (global) {
+    var timeouts = [];
+    var messageName = 'zero-timeout-message';
+
+    // Like setTimeout, but only takes a function argument.	 There's
+    // no time argument (always zero) and no arguments (you have to
+    // use a closure).
+    function setZeroTimeoutPostMessage(fn) {
+      timeouts.push(fn);
+      global.postMessage(messageName, '*');
+    }
+
+    function handleMessage(event) {
+      if (event.source == global && event.data == messageName) {
+        if (event.stopPropagation) {
+          event.stopPropagation();
+        }
+        if (timeouts.length) {
+          timeouts.shift()();
+        }
+      }
+    }
+    if (global.addEventListener) {
+      global.addEventListener('message', handleMessage, true);
+    } else if (global.attachEvent) {
+      global.attachEvent('onmessage', handleMessage);
+    }
+    return setZeroTimeoutPostMessage;
+  }(this),
+
+  blobToArrayBuffer: function (blob, cb) {
+    var fr = new FileReader();
+    fr.onload = function (evt) {
+      cb(evt.target.result);
+    };
+    fr.readAsArrayBuffer(blob);
+  },
+  blobToBinaryString: function (blob, cb) {
+    var fr = new FileReader();
+    fr.onload = function (evt) {
+      cb(evt.target.result);
+    };
+    fr.readAsBinaryString(blob);
+  },
+  binaryStringToArrayBuffer: function (binary) {
+    var byteArray = new Uint8Array(binary.length);
+    for (var i = 0; i < binary.length; i++) {
+      byteArray[i] = binary.charCodeAt(i) & 0xff;
+    }
+    return byteArray.buffer;
+  },
+  randomToken: function () {
+    return Math.random().toString(36).substr(2);
+  }
+};
+
+module.exports = util;
+
+/***/ }),
+/* 14 */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "f", function() { return openStream; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "g", function() { return playVideo; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "d", function() { return getPeerId; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "b", function() { return createText; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "c", function() { return createVideo; });
+/* unused harmony export appendData */
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "a", function() { return activeCamButtons; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "e", function() { return listenData; });
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0_uid__ = __webpack_require__(15);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0_uid___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_0_uid__);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1_jquery__ = __webpack_require__(6);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1_jquery___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_1_jquery__);
+
+
+
+let myId = null;
+
+// open stream of user browser
 function openStream(callbak) {
     navigator.mediaDevices.getUserMedia({ audio: false, video: true }).then(stream => {
         callbak(stream);
     }).catch(error => console.log(error));
 }
 
-module.exports = openStream;
-
-/***/ }),
-/* 16 */
-/***/ (function(module, exports) {
-
-function playVdeo(stream, idVideo) {
+// play video
+function playVideo(stream, idVideo) {
     const video = document.getElementById(idVideo);
     video.srcObject = stream;
     video.play();
 }
 
-module.exports = playVdeo;
+// create and get peer id (unique)
+function getPeerId() {
+    myId = __WEBPACK_IMPORTED_MODULE_0_uid___default()(10);
+    __WEBPACK_IMPORTED_MODULE_1_jquery___default()('#myPeerId').html(myId);
+    return myId;
+}
+
+// create the chat dom
+function createText(data) {
+    const text = '<li style="width:100%">' + '<div class="msj-rta macro">' + '<div class="avatar">' + '<img class="img-circle" style="width:100%;" src="https://cdn0.iconfinder.com/data/icons/iconshock_guys/512/matthew.png" /></div>' + '<div class="text text-r">' + '<p>' + data.message + '</p>' + '<p><small>' + data.id + '</small></p>' + '</div>' + '</div>' + '</li>';
+    return text;
+}
+
+// create and append video element
+function createVideo(id) {
+    const video = '<div class="col-xs-6">' + 'Id : ' + id + '<video id="' + id + '" controls></video>' + '</div>';
+    __WEBPACK_IMPORTED_MODULE_1_jquery___default()("#cams").append(video);
+}
+
+// append the data to chat box
+function appendData(data) {
+    __WEBPACK_IMPORTED_MODULE_1_jquery___default()("#chat ul").append(createText(data));
+}
+
+// remove disabled attr from cam buttons
+function activeCamButtons() {
+    __WEBPACK_IMPORTED_MODULE_1_jquery___default()('.btnCam').removeAttr('disabled');
+    __WEBPACK_IMPORTED_MODULE_1_jquery___default()('#btnCamRequest').removeAttr('disabled');
+    __WEBPACK_IMPORTED_MODULE_1_jquery___default()('#txtFriendIdForRequest').removeAttr('disabled');
+}
+
+// listen data
+function listenData(conn, peer = null, connectedPeers = null) {
+    conn.on('data', data => {
+        if (data.label === 'message') {
+            appendData(data);
+        } else if (data.label === 'camRequest') {
+            appendData({ message: data.id + ' sent open cam request. <button class="btn btn-primary" class="btnCam">Open Cam</button>', id: data.id });
+        } else if (data.label === 'peers') {
+            console.log(data.peers);
+            for (let p in data.peers) {
+                if (data.peers[p] !== peer.id) {
+                    console.log(1);
+                    connectedPeers[data.peers[p]] = peer.connect(data.peers[p]);
+                    connectedPeers[data.peers[p]].on('data', subData => {
+                        if (subData.label === 'message') {
+                            appendData(subData);
+                        }
+                    });
+                }
+            }
+        }
+    });
+
+    if (connectedPeers !== null) {
+        return connectedPeers;
+    }
+}
+
+
+
+/***/ }),
+/* 15 */
+/***/ (function(module, exports) {
+
+/**
+ * Export `uid`
+ */
+
+module.exports = uid;
+
+/**
+ * Create a `uid`
+ *
+ * @param {String} len
+ * @return {String} uid
+ */
+
+function uid(len) {
+  len = len || 7;
+  return Math.random().toString(35).substr(2, len);
+}
 
 /***/ })
 /******/ ]);

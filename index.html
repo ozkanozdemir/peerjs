@@ -7,17 +7,31 @@
     <meta http-equiv="X-UA-Compatible" content="ie=edge">
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
     <link rel="stylesheet" href="css/main.css">
-    <title>Peer JS</title>
+    <title>Peer JS Message</title>
 </head>
 <body>
 <div class="container">
-    <h1>Peer JS</h1>
+    <h1>Peer JS Message</h1>
     <h3>My peer id : <span id="myPeerId"></span></h3>
-    <video id="localStream" width="300" controls></video>
-    <video id="friendStream" width="300" controls></video>
-    <br>
     <input type="text" placeholder="Your friend id" id="txtFriendId">
-    <button class="btn btn-primary" id="btnCall">Connect</button>
+    <button class="btn btn-primary" id="btnConnect">Connect</button>
+    <button class="btn btn-primary" class="btnCam" disabled>Open Cam</button>
+    <br>
+    <input type="text" placeholder="Your friend id" id="txtFriendIdForRequest" disabled>
+    <button class="btn btn-primary" id="btnCamRequest" disabled>Send Cam Request</button>
+    <span id="connectStatus"></span>
+    <hr>
+    <div id="cams" class="row"></div>
+    <div id="chat" class="col-md-10 col-md-offset-1 frame">
+        <ul></ul>
+        <div>
+            <div class="msj-rta macro" style="margin:auto">
+                <div class="text text-r" style="background:whitesmoke !important">
+                    <input class="mytext" id="message" placeholder="Type a message"/>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 <script src="dist/bundle.js"></script>
 </body>
