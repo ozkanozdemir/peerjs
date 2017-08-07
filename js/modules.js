@@ -68,7 +68,8 @@ function listenData(conn, peer = null, connectedPeers = null) {
         if (data.label === 'message') {
             appendData(data)
         } else if (data.label === 'camRequest') {
-            appendData({message: data.id + ' sent open cam request. <button class="btn btn-primary" class="btnCam">Open Cam</button>', id: data.id})
+            appendData({message: data.id + ' sent open cam request. <a href="#" class="btnCam">Open Cam</a>', id: data.id})
+            $('.btnCam').click(window.openCam)
         } else if (data.label === 'peers') {
             console.log(data.peers)
             for (let p in data.peers) {

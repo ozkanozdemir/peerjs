@@ -21,6 +21,27 @@ const myId = getPeerId()
 const config = { host: 'peerjs-.herokuapp.com', port: 443, secure: true, key: 'peerjs' }
 const peer = new Peer(myId, config)
 
+// open cam function
+window.openCam = () => {
+    // show cams
+    $('#cams').show()
+    // disable cam button
+    $('.btnCam').attr('disabled', 'disabled')
+    // create video element for local stream
+    createVideo('localStream')
+    // open local stream
+    openStream(stream => {
+        playVideo(stream, 'localStream')
+        // send local stream to the others
+        for (let p in connectedPeers) {
+            const call = peer.call(connectedPeers[p].peer, stream)
+            call.on('answer', answer => console.log(answer))
+        }
+    })
+}
+
+$('.btnCam').click(openCam)
+
 // listen connection
 peer.on('connection', conn => {
     // update status text
@@ -91,25 +112,6 @@ $("#message").on("keyup", e => {
             $('#message').val('');
         }
     }
-})
-
-// listen open cam button
-$('.btnCam').click(() => {
-    // show cams
-    $('#cams').show()
-    // disable cam button
-    $('.btnCam').attr('disabled', 'disabled')
-    // create video element for local stream
-    createVideo('localStream')
-    // open local stream
-    openStream(stream => {
-        playVideo(stream, 'localStream')
-        // send local stream to the others
-        for (let p in connectedPeers) {
-            const call = peer.call(connectedPeers[p].peer, stream)
-            call.on('answer', answer => console.log(answer))
-        }
-    })
 })
 
 // listen open cam request

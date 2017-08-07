@@ -11366,6 +11366,27 @@ const myId = Object(__WEBPACK_IMPORTED_MODULE_2__modules__["d" /* getPeerId */])
 const config = { host: 'peerjs-.herokuapp.com', port: 443, secure: true, key: 'peerjs' };
 const peer = new __WEBPACK_IMPORTED_MODULE_0_peerjs___default.a(myId, config);
 
+// open cam function
+window.openCam = () => {
+    // show cams
+    __WEBPACK_IMPORTED_MODULE_1_jquery___default()('#cams').show();
+    // disable cam button
+    __WEBPACK_IMPORTED_MODULE_1_jquery___default()('.btnCam').attr('disabled', 'disabled');
+    // create video element for local stream
+    Object(__WEBPACK_IMPORTED_MODULE_2__modules__["c" /* createVideo */])('localStream');
+    // open local stream
+    Object(__WEBPACK_IMPORTED_MODULE_2__modules__["f" /* openStream */])(stream => {
+        Object(__WEBPACK_IMPORTED_MODULE_2__modules__["g" /* playVideo */])(stream, 'localStream');
+        // send local stream to the others
+        for (let p in connectedPeers) {
+            const call = peer.call(connectedPeers[p].peer, stream);
+            call.on('answer', answer => console.log(answer));
+        }
+    });
+};
+
+__WEBPACK_IMPORTED_MODULE_1_jquery___default()('.btnCam').click(openCam);
+
 // listen connection
 peer.on('connection', conn => {
     // update status text
@@ -11436,25 +11457,6 @@ __WEBPACK_IMPORTED_MODULE_1_jquery___default()("#message").on("keyup", e => {
             __WEBPACK_IMPORTED_MODULE_1_jquery___default()('#message').val('');
         }
     }
-});
-
-// listen open cam button
-__WEBPACK_IMPORTED_MODULE_1_jquery___default()('.btnCam').click(() => {
-    // show cams
-    __WEBPACK_IMPORTED_MODULE_1_jquery___default()('#cams').show();
-    // disable cam button
-    __WEBPACK_IMPORTED_MODULE_1_jquery___default()('.btnCam').attr('disabled', 'disabled');
-    // create video element for local stream
-    Object(__WEBPACK_IMPORTED_MODULE_2__modules__["c" /* createVideo */])('localStream');
-    // open local stream
-    Object(__WEBPACK_IMPORTED_MODULE_2__modules__["f" /* openStream */])(stream => {
-        Object(__WEBPACK_IMPORTED_MODULE_2__modules__["g" /* playVideo */])(stream, 'localStream');
-        // send local stream to the others
-        for (let p in connectedPeers) {
-            const call = peer.call(connectedPeers[p].peer, stream);
-            call.on('answer', answer => console.log(answer));
-        }
-    });
 });
 
 // listen open cam request
@@ -13049,7 +13051,8 @@ function listenData(conn, peer = null, connectedPeers = null) {
         if (data.label === 'message') {
             appendData(data);
         } else if (data.label === 'camRequest') {
-            appendData({ message: data.id + ' sent open cam request. <button class="btn btn-primary" class="btnCam">Open Cam</button>', id: data.id });
+            appendData({ message: data.id + ' sent open cam request. <a href="#" class="btnCam">Open Cam</a>', id: data.id });
+            __WEBPACK_IMPORTED_MODULE_1_jquery___default()('.btnCam').click(window.openCam);
         } else if (data.label === 'peers') {
             console.log(data.peers);
             for (let p in data.peers) {
